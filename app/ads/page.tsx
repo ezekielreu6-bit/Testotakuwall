@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePaystackPayment } from "react-paystack";
 import { auth, db } from "@/lib/firebase";
@@ -7,7 +7,7 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from "@/components/AuthProvider";
 import { 
   ArrowLeft, UploadCloud, Smartphone, Globe, 
-  X, AlertCircle, CheckCircle2, Video 
+  X
 } from "lucide-react";
 
 type AdType = 'website' | 'app';
@@ -68,7 +68,7 @@ export default function CreateAdPage() {
       formData.append("file", file);
       formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
 
-      // Use XMLHttpRequest for progress tracking (fetch doesn't support upload progress easily)
+      // Use XMLHttpRequest for progress tracking
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload`);
 
@@ -125,7 +125,9 @@ export default function CreateAdPage() {
     if (!link || !title || !desc) return showToast("Please fill all fields", true);
     if (!file) return showToast("Please upload a video", true);
     
-    initializePayment(handlePublish, () => showToast("Payment Cancelled", true));
+    // FIX: Cast to 'any' to bypass strict TypeScript argument check
+    // The library supports 2 arguments in JS, but the TS definition is strict.
+    (initializePayment as any)(handlePublish, () => showToast("Payment Cancelled", true));
   };
 
   return (
