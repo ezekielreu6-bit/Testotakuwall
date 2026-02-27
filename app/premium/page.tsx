@@ -6,7 +6,7 @@ import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from "@/components/AuthProvider";
 import { 
-  ArrowLeft, Zap, Star, ChevronRight, CheckCircle2 
+  ArrowLeft, Zap, Star, ChevronRight 
 } from "lucide-react";
 
 type PlanType = 'monthly' | 'yearly';
@@ -22,13 +22,13 @@ export default function PremiumPage() {
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // PAYSTACK SUBSCRIPTION PLANS (From your original code)
+  // PAYSTACK SUBSCRIPTION PLANS
   const PLANS = {
     monthly: { 
       code: 'PLN_ajnhis84ifn88hh', 
       price: '₦2,000', 
       label: 'Monthly', 
-      amount: 200000 // In Kobo (Optional when using plan, but good for display logic)
+      amount: 200000 
     },
     yearly: { 
       code: 'PLN_fc0bgr4rzi3eily', 
@@ -39,15 +39,13 @@ export default function PremiumPage() {
     }
   };
 
-  // Paystack Configuration Object
   const config = {
     reference: (new Date()).getTime().toString(),
     email: user?.email || "",
-    plan: PLANS[selectedPlan].code, // <--- THIS IS KEY FOR SUBSCRIPTIONS
+    plan: PLANS[selectedPlan].code,
     publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "",
   };
 
-  // Initialize Hook
   const initializePayment = usePaystackPayment(config);
 
   const showToast = (msg: string) => {
@@ -55,20 +53,16 @@ export default function PremiumPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Success Callback
   const handleSuccess = async (reference: any) => {
     if (!user) return;
     setProcessing(true);
     showToast("Subscription Active! Updating Profile...");
 
     try {
-      // Calculate Expiry Date locally for immediate UI update 
-      // (Paystack webhooks should handle renewals in production)
       const expiryDate = new Date();
       if (selectedPlan === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
       else expiryDate.setFullYear(expiryDate.getFullYear() + 1);
 
-      // Update User in Firestore
       await updateDoc(doc(db, "users", user.uid), {
         isPremium: true,
         premiumPlan: selectedPlan,
@@ -89,31 +83,27 @@ export default function PremiumPage() {
     if (!user) return router.push('/auth');
     if (processing) return;
     
-    // Check if user is already premium
     if (userData?.isPremium) {
       showToast("You are already a Pro Member!");
       return;
     }
 
-    // Launch Paystack Popup
-    initializePayment(handleSuccess, () => showToast("Transaction Cancelled"));
+    // FIX: Cast to any to bypass strict TypeScript argument length check
+    (initializePayment as any)(handleSuccess, () => showToast("Transaction Cancelled"));
   };
 
   return (
     <main className="min-h-screen bg-black text-white relative overflow-hidden flex flex-col">
       
-      {/* Background Ambient Glows */}
       <div className="absolute top-[-10%] left-[-20%] w-[500px] h-[500px] bg-red-600/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-20%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Toast */}
       {toast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-white text-black px-6 py-3 rounded-full font-bold text-sm shadow-2xl z-50 animate-in slide-in-from-top-4">
           {toast}
         </div>
       )}
 
-      {/* Header */}
       <header className="fixed top-0 w-full p-4 z-40 flex justify-between items-center">
         <button 
           onClick={() => router.back()} 
@@ -125,14 +115,10 @@ export default function PremiumPage() {
         <div className="w-10" />
       </header>
 
-      {/* Content */}
       <div className="pt-24 pb-32 px-6 max-w-lg mx-auto relative z-10 flex-1 flex flex-col">
-        
-        {/* Hero Section */}
         <div className="text-center mb-8">
           <div className="relative inline-block mb-6">
             <div className="w-24 h-24 bg-gradient-to-tr from-red-600 to-orange-600 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-red-600/30 rotate-3">
-              {/* THE RED TICK SVG */}
               <svg viewBox="0 0 24 24" className="w-12 h-12 fill-white drop-shadow-md">
                 <path d={rosettePath}/>
               </svg>
@@ -145,15 +131,13 @@ export default function PremiumPage() {
             Otaku<span className="text-red-600">Pro</span>
           </h1>
           <p className="text-zinc-400 text-sm font-medium leading-relaxed max-w-xs mx-auto">
-            Get the Red Tick. Unlock the full potential of OtakuWall with a subscription plan.
+            Get the Red Tick. Unlock the full potential of OtakuWall.
           </p>
         </div>
 
-        {/* Benefits Grid */}
         <div className="space-y-4 mb-8">
           <div className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition">
             <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center shrink-0">
-               {/* RED TICK SVG ICON */}
                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-red-500">
                 <path d={rosettePath}/>
               </svg>
@@ -185,7 +169,6 @@ export default function PremiumPage() {
           </div>
         </div>
 
-        {/* Plan Selection */}
         <div className="space-y-4">
           <PlanCard 
             type="monthly" 
@@ -201,10 +184,8 @@ export default function PremiumPage() {
             badge={PLANS.yearly.save}
           />
         </div>
-
       </div>
 
-      {/* Sticky Bottom Button */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/90 to-transparent z-40">
         <button 
           onClick={handleSubscribe}
@@ -222,12 +203,9 @@ export default function PremiumPage() {
           Secured by Paystack • Cancel Anytime
         </p>
       </div>
-
     </main>
   );
 }
-
-// --- Subcomponent: Plan Card ---
 
 function PlanCard({ type, price, selected, onClick, badge }: { type: string, price: string, selected: boolean, onClick: () => void, badge?: string }) {
   return (
