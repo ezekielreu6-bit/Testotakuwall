@@ -81,3 +81,23 @@ input[type=range]::-webkit-slider-runnable-track {
 input[type=range]::-webkit-slider-thumb {
   @apply appearance-none h-5 w-5 rounded-full bg-red-600 border-2 border-white -mt-2 shadow-[0_0_10px_rgba(239,68,68,0.5)];
 }
+/* app/globals.css */
+@layer base {
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Important for the snap container */
+  }
+}
+
+/* TikTok-style Vertical Scroll */
+.snap-y {
+  scroll-snap-type: y mandatory;
+}
+.snap-start {
+  scroll-snap-align: start;
+}
+.snap-always {
+  scroll-snap-stop: always;
+}
