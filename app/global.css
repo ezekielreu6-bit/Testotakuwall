@@ -3,18 +3,59 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 0, 0, 0;
-  --background-end-rgb: 5, 5, 5;
+  /* Exact Colors from your HTML files */
+  --otaku-red: #ef4444;
+  --otaku-black: #000000;
+  --otaku-dark: #050505;
+  --otaku-zinc: #1c1c1e; /* Apple-style dark grey used in your inputs */
+  --otaku-border: rgba(255, 255, 255, 0.08);
 }
 
 @layer base {
-  body {
-    @apply bg-black text-white selection:bg-red-500/30;
-    font-family: var(--font-jakarta), sans-serif;
-    overscroll-behavior-y: none; /* Prevents browser bounce */
+  html {
     -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+    background-color: var(--otaku-black);
+  }
+  
+  body {
+    background-color: var(--otaku-black);
+    color: #ffffff;
+    font-family: var(--font-jakarta), sans-serif;
+    overscroll-behavior-y: none;
     user-select: none;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  /* The Glass Effect from your headers */
+  .glass {
+    @apply bg-black/80 backdrop-blur-xl border-b border-white/5;
+  }
+
+  /* The Signature Red Button */
+  .btn-primary {
+    @apply bg-red-600 text-white font-black uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-red-900/20;
+  }
+
+  /* The Card style used in Inbox and Profile */
+  .otaku-card {
+    background-color: var(--otaku-zinc);
+    border: 1px solid var(--otaku-border);
+    @apply rounded-[24px] transition-all;
+  }
+
+  /* Chat Bubble Style */
+  .msg-bubble {
+    @apply relative px-4 py-3 rounded-[20px] max-w-[80%] text-[14px] leading-relaxed break-words;
+  }
+
+  /* Premium Card Glow */
+  .premium-card-active {
+    background: linear-gradient(145deg, #111, #050505);
+    border: 2px solid var(--otaku-red);
+    box-shadow: 0 0 40px rgba(239, 68, 68, 0.15);
   }
 }
 
@@ -25,79 +66,39 @@
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pt-safe { padding-top: env(safe-area-inset-top); }
 
-  /* Original Message Bubble Styles */
-  .msg-bubble {
-    @apply relative px-4 py-3 rounded-[20px] max-w-[80%] text-[14px] leading-[1.5] break-words shadow-sm;
+  /* Text Shadow: Crucial for reading text over bright anime videos */
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 4px 12px rgba(0,0,0,0.5);
   }
 
-  /* Original Sub-view Transition (The sliding panels) */
-  .sub-view {
-    @apply fixed inset-0 bg-black z-[400] translate-x-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col;
+  /* TikTok-style Snap Scroll */
+  .snap-container {
+    height: 100vh;
+    width: 100vw;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
   }
-  .sub-view.open { @apply translate-x-0; }
-
-  /* Poll Card Styles */
-  .poll-card {
-    @apply bg-zinc-900 border border-white/10 rounded-[16px] p-4 w-full min-w-[220px] mt-1;
-  }
-  .poll-option {
-    @apply bg-zinc-800 rounded-[10px] p-3 mt-2 relative overflow-hidden cursor-pointer border border-transparent active:scale-[0.98] transition-all;
-  }
-  .poll-progress {
-    @apply absolute left-0 top-0 h-full bg-red-600/20 transition-all duration-500;
-  }
-
-  /* Reaction Pills */
-  .reaction-pill {
-    @apply absolute -bottom-2 right-2 bg-zinc-900 border border-white/10 rounded-full px-2 py-0.5 text-[10px] flex items-center gap-1 shadow-lg;
-  }
-
-  /* Skeleton Loading Shimmer */
-  .skeleton {
-    @apply bg-zinc-900 relative overflow-hidden;
-  }
-  .skeleton::after {
-    content: "";
-    @apply absolute inset-0 -translate-x-full;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
-    animation: shimmer 1.5s infinite;
-  }
-
-  /* Glassmorphism Header */
-  .glass-header {
-    @apply fixed top-0 left-0 right-0 h-[60px] bg-black/80 backdrop-blur-xl border-b border-white/5 z-50 px-5 flex items-center;
+  
+  .snap-item {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    height: 100vh;
+    width: 100vw;
   }
 }
 
-@keyframes shimmer { 100% { transform: translateX(100%); } }
-
-/* Range Input for Ad duration */
-input[type=range] {
-  @apply w-full bg-transparent appearance-none cursor-pointer;
-}
-input[type=range]::-webkit-slider-runnable-track {
-  @apply h-1 bg-zinc-800 rounded-full;
-}
-input[type=range]::-webkit-slider-thumb {
-  @apply appearance-none h-5 w-5 rounded-full bg-red-600 border-2 border-white -mt-2 shadow-[0_0_10px_rgba(239,68,68,0.5)];
-}
-/* app/globals.css */
-@layer base {
-  html, body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    overflow: hidden; /* Important for the snap container */
-  }
+/* Animations from your original logic */
+@keyframes pop {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  20% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
 }
 
-/* TikTok-style Vertical Scroll */
-.snap-y {
-  scroll-snap-type: y mandatory;
+.heart-pop {
+  animation: pop 0.8s ease-out forwards;
 }
-.snap-start {
-  scroll-snap-align: start;
-}
-.snap-always {
-  scroll-snap-stop: always;
+
+/* Red Tick specific style if you want to apply filters to raw SVGs */
+.red-tick-filter {
+  filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.5));
 }
