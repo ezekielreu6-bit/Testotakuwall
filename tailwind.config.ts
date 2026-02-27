@@ -1,18 +1,14 @@
-import type { Config } from "tailwindcss";
-
+// tailwind.config.ts
 const config: Config = {
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
-      fontFamily: {
-        sans: ['var(--font-jakarta)'],
-      },
-    },
-  },
-  plugins: [],
-};
-export default config;
+      padding: {
+        'safe': 'env(safe-area-inset-bottom)',
+      }
+    }
+  }
+}
