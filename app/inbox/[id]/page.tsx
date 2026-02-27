@@ -1,4 +1,3 @@
-// app/inbox/[id]/page.tsx
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -18,7 +17,7 @@ export default function ChatRoom() {
   
   const [chatData, setChatData] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const[input, setInput] = useState("");
+  const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 1. Listen to Chat Metadata
@@ -26,8 +25,9 @@ export default function ChatRoom() {
     if (!id || !user) return;
     const unsubChat = onSnapshot(doc(db, "chats", id), (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data() as Chat;
-        setChatData({ id: docSnap.id, ...data });
+        const data = docSnap.data();
+        // FIX: Spread the data first, then assign the ID to avoid double-key error
+        setChatData({ ...data, id: docSnap.id } as Chat);
 
         // Reset unread count for current user
         if (data.unread?.[user.uid] && data.unread[user.uid] > 0) {
@@ -45,7 +45,7 @@ export default function ChatRoom() {
     if (!id) return;
     const q = query(collection(db, `chats/${id}/messages`), orderBy("timestamp", "asc"));
     const unsubMsgs = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Message[];
+      const msgs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Message[];
       setMessages(msgs);
       // Scroll to bottom on new message
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
@@ -67,20 +67,24 @@ export default function ChatRoom() {
       if (p !== user.uid) newUnread[p] = (newUnread[p] || 0) + 1;
     });
 
-    // Add Message
-    await addDoc(collection(db, `chats/${id}/messages`), {
-      text,
-      senderId: user.uid,
-      timestamp: serverTimestamp(),
-      type: 'text'
-    });
+    try {
+      // Add Message
+      await addDoc(collection(db, `chats/${id}/messages`), {
+        text,
+        senderId: user.uid,
+        timestamp: serverTimestamp(),
+        type: 'text'
+      });
 
-    // Update Chat Metadata
-    await updateDoc(doc(db, "chats", id), {
-      lastMsg: text,
-      lastActivity: serverTimestamp(),
-      unread: newUnread
-    });
+      // Update Chat Metadata
+      await updateDoc(doc(db, "chats", id), {
+        lastMsg: text,
+        lastActivity: serverTimestamp(),
+        unread: newUnread
+      });
+    } catch (err) {
+      console.error("Message send error:", err);
+    }
   };
 
   if (!chatData || !user) return <div className="h-screen bg-black" />;
@@ -91,7 +95,7 @@ export default function ChatRoom() {
       <header className="p-4 border-b border-white/5 flex justify-between items-center bg-black/90 backdrop-blur-md z-40">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} className="text-white"><ArrowLeft /></button>
-          <img src={chatData.chatAvatar} className="w-10 h-10 rounded-full border border-white/5 object-cover" />
+          <img src={chatData.chatAvatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${chatData.chatName}`} className="w-10 h-10 rounded-full border border-white/5 object-cover" alt="avatar" />
           <div>
             <h3 className="text-sm font-bold truncate max-w-[150px] text-white">{chatData.chatName}</h3>
             <div className="text-[10px] text-orange-400 font-black uppercase tracking-tighter">
@@ -108,7 +112,7 @@ export default function ChatRoom() {
           const isMe = m.senderId === user.uid;
           return (
             <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`relative px-4 py-3 rounded-2xl max-w-[80%] text-sm font-medium word-break ${
+              <div className={`relative px-4 py-3 rounded-2xl max-w-[80%] text-sm font-medium break-words ${
                 isMe ? 'bg-red-600 text-white rounded-br-sm' : 'bg-zinc-800 text-zinc-200 rounded-bl-sm'
               }`}>
                 {m.text}
