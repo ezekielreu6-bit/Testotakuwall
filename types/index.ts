@@ -1,4 +1,5 @@
 // types/index.ts
+
 export interface UserData {
   uid: string;
   username: string;
@@ -8,6 +9,8 @@ export interface UserData {
   banned?: boolean;
   bio?: string;
   createdAt?: any;
+  premiumPlan?: string;
+  premiumExpiry?: any;
 }
 
 export interface Wallpaper {
@@ -18,11 +21,14 @@ export interface Wallpaper {
   userId: string;
   username: string;
   isLive?: boolean;
+  isStory?: boolean;     // Added for Story logic
+  category?: string;    // Added for Filtering
+  repostedFrom?: string; // This fixes your specific build error
   likes: string[];
   views: number;
   createdAt: any;
 }
-// types/index.ts (Append to existing)
+
 export interface Chat {
   id: string;
   chatName: string;
@@ -47,7 +53,7 @@ export interface Message {
   mediaUrl?: string;
   options?: { text: string; votes: string[] }[];
 }
-// types/index.ts (Append this)
+
 export interface Report {
   id: string;
   contentId: string;
