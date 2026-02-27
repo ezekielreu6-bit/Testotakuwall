@@ -2,53 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 1. RESET BROWSER DEFAULTS */
-* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --otaku-red: #ef4444;
+  --otaku-zinc: #1c1c1e;
+}
 
+/* 1. LOCK VIEWPORT (Prevents the white gaps and bouncing) */
 html, body {
-  height: 100%;
-  width: 100%;
-  overflow: hidden; /* Prevent standard scroll */
-  background-color: #000;
-  color: white;
-}
-
-body {
-  font-family: var(--font-jakarta), sans-serif;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* 2. THE TIKTOK-STYLE CONTAINER */
-.feed-container {
-  height: 100vh;
+  height: 100dvh; /* Dynamic viewport height for mobile address bars */
   width: 100vw;
-  overflow-y: scroll;
-  scroll-snap-type: y mandatory;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.feed-container::-webkit-scrollbar { display: none; }
-
-.feed-item {
-  height: 100vh;
-  width: 100vw;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
   background-color: #000;
+  position: fixed; 
 }
 
-/* 3. UTILITIES */
-.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-.text-shadow { text-shadow: 0 2px 4px rgba(0,0,0,0.9); }
+@layer base {
+  body {
+    @apply bg-black text-white antialiased;
+    font-family: var(--font-jakarta), sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+}
 
-/* 4. DRAWER ANIMATION */
-.drawer-mask {
-  @apply fixed inset-0 bg-black/60 z-[150] transition-opacity duration-300;
+@layer utilities {
+  /* 2. THE TIKTOK-STYLE SCROLL CONTAINER */
+  .feed-container {
+    height: 100dvh;
+    width: 100vw;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .feed-container::-webkit-scrollbar { display: none; }
+
+  /* 3. CENTERED VIDEO SLIDE */
+  .feed-item {
+    height: 100dvh;
+    width: 100vw;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    @apply relative flex items-center justify-center bg-black;
+  }
+
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 4px 12px rgba(0,0,0,0.5);
+  }
+
+  .glass {
+    @apply bg-black/60 backdrop-blur-xl border border-white/5;
+  }
+
+  /* 4. CHAT & DRAWER STYLES */
+  .msg-bubble {
+    @apply relative px-4 py-3 rounded-[20px] max-w-[80%] text-[14px] leading-relaxed;
+  }
+  
+  .drawer-mask {
+    @apply fixed inset-0 bg-black/60 z-[150] transition-opacity duration-300;
+  }
+
+  .otaku-drawer {
+    @apply fixed bottom-0 left-0 right-0 bg-[#161616] rounded-t-[32px] z-[160] 
+           transition-transform duration-300 border-t border-white/5 pb-safe;
+  }
 }
-.drawer-content {
-  @apply fixed bottom-0 left-0 right-0 bg-[#161616] rounded-t-[24px] z-[160] transition-transform duration-300 border-t border-white/5;
+
+/* Heart Pop Animation */
+@keyframes heartPop {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
 }
+.animate-heart-pop { animation: heartPop 0.8s ease-out forwards; }
