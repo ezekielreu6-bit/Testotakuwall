@@ -9,93 +9,75 @@
 }
 
 @layer base {
-  html {
-    -webkit-tap-highlight-color: transparent;
-    scroll-behavior: smooth;
-  }
-  
   body {
-    color: rgb(var(--foreground-rgb));
-    background: linear-gradient(
-        to bottom,
-        transparent,
-        rgb(var(--background-end-rgb))
-      )
-      rgb(var(--background-start-rgb));
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    /* Prevents the "bounce" effect on mobile when scrolling past the edge */
-    overscroll-behavior-y: none;
-    overflow-x: hidden;
+    @apply bg-black text-white selection:bg-red-500/30;
+    font-family: var(--font-jakarta), sans-serif;
+    overscroll-behavior-y: none; /* Prevents browser bounce */
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
   }
 }
 
 @layer utilities {
-  /* Hides scrollbar but allows scrolling (Crucial for Video Feed) */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  /* Handle iPhone X+ Home Indicator Area */
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   
-  .pt-safe {
-    padding-top: env(safe-area-inset-top);
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+
+  /* Original Message Bubble Styles */
+  .msg-bubble {
+    @apply relative px-4 py-3 rounded-[20px] max-w-[80%] text-[14px] leading-[1.5] break-words shadow-sm;
   }
 
-  /* Glassmorphism Utility */
-  .glass {
-    @apply bg-black/80 backdrop-blur-xl border border-white/5;
+  /* Original Sub-view Transition (The sliding panels) */
+  .sub-view {
+    @apply fixed inset-0 bg-black z-[400] translate-x-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col;
+  }
+  .sub-view.open { @apply translate-x-0; }
+
+  /* Poll Card Styles */
+  .poll-card {
+    @apply bg-zinc-900 border border-white/10 rounded-[16px] p-4 w-full min-w-[220px] mt-1;
+  }
+  .poll-option {
+    @apply bg-zinc-800 rounded-[10px] p-3 mt-2 relative overflow-hidden cursor-pointer border border-transparent active:scale-[0.98] transition-all;
+  }
+  .poll-progress {
+    @apply absolute left-0 top-0 h-full bg-red-600/20 transition-all duration-500;
   }
 
-  /* Text Shadow for better readability on videos */
-  .text-shadow-md {
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  /* Reaction Pills */
+  .reaction-pill {
+    @apply absolute -bottom-2 right-2 bg-zinc-900 border border-white/10 rounded-full px-2 py-0.5 text-[10px] flex items-center gap-1 shadow-lg;
   }
-  
-  .text-shadow-lg {
-    text-shadow: 0 4px 12px rgba(0,0,0,0.8);
+
+  /* Skeleton Loading Shimmer */
+  .skeleton {
+    @apply bg-zinc-900 relative overflow-hidden;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Glassmorphism Header */
+  .glass-header {
+    @apply fixed top-0 left-0 right-0 h-[60px] bg-black/80 backdrop-blur-xl border-b border-white/5 z-50 px-5 flex items-center;
   }
 }
 
-/* Custom Animations */
-@keyframes heartPop {
-  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-  15% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
 
-.animate-heart-pop {
-  animation: heartPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-/* Range Input Styling (For Ad Budget Slider) */
+/* Range Input for Ad duration */
 input[type=range] {
-  -webkit-appearance: none; 
-  background: transparent; 
+  @apply w-full bg-transparent appearance-none cursor-pointer;
 }
-
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  height: 20px;
-  width: 20px;
-  border-radius: 50%;
-  background: #ef4444;
-  cursor: pointer;
-  margin-top: -8px; 
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
-  border: 2px solid #fff;
-}
-
 input[type=range]::-webkit-slider-runnable-track {
-  width: 100%;
-  height: 4px;
-  cursor: pointer;
-  background: #333;
-  border-radius: 2px;
+  @apply h-1 bg-zinc-800 rounded-full;
+}
+input[type=range]::-webkit-slider-thumb {
+  @apply appearance-none h-5 w-5 rounded-full bg-red-600 border-2 border-white -mt-2 shadow-[0_0_10px_rgba(239,68,68,0.5)];
 }
