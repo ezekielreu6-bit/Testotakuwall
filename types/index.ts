@@ -47,3 +47,12 @@ export interface Message {
   mediaUrl?: string;
   options?: { text: string; votes: string[] }[];
 }
+// types/index.ts (Append this)
+export interface Report {
+  id: string;
+  contentId: string;
+  reason: string;
+  reporter: string;
+  timestamp: any;
+  status: string;
+}
