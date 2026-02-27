@@ -1,5 +1,5 @@
 // app/layout.tsx
-import './globals.css'
+import './global.css'
 import { AuthProvider } from '@/components/AuthProvider'
 
 export const metadata = { title: 'OTAKUWALL', description: 'Free 4K Anime Wallpapers & Shorts' }
