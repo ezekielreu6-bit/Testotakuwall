@@ -3,8 +3,8 @@ import { useEffect, useState, useRef } from "react";
 import { db } from "@/lib/firebase";
 import { 
   collection, query, where, getDocs, doc, getDoc, 
-  limit, orderBy, updateDoc, arrayUnion, arrayRemove, 
-  setDoc, serverTimestamp, onSnapshot, addDoc 
+  limit, updateDoc, arrayUnion, arrayRemove, 
+  setDoc, serverTimestamp, onSnapshot, addDoc, orderBy 
 } from "firebase/firestore";
 import { 
   Heart, MessageCircle, Share2, Volume2, VolumeX, 
@@ -16,6 +16,15 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import Link from "next/link";
 import { Wallpaper, UserData } from "@/types";
 
+// Explicit type for VideoSlide props
+interface VideoSlideProps {
+  video: Wallpaper & { creator?: UserData };
+  muted: boolean;
+  setMuted: (val: boolean) => void;
+  isFollowing: boolean;
+  onComment: () => void;
+}
+
 export default function Feed() {
   const { user, userData } = useAuth();
   const [videos, setVideos] = useState<(Wallpaper & { creator?: UserData })[]>([]);
@@ -23,31 +32,27 @@ export default function Feed() {
   const [muted, setMuted] = useState(true);
   const [followingList, setFollowingList] = useState<string[]>([]);
   
-  // Comment Drawer States
   const [showComments, setShowComments] = useState(false);
   const [commentVid, setCommentVid] = useState<string | null>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [commentInput, setCommentInput] = useState("");
 
-  // Helper: Shuffle Array
   const shuffle = (array: any[]) => {
-    let currentIndex = array.length, randomIndex;
-    while (currentIndex !== 0) {
-      randomIndex = Math.floor(Math.random() * currentIndex);
-      currentIndex--;
-      [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    const newArr = [...array];
+    for (let i = newArr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
     }
-    return array;
+    return newArr;
   };
 
-  // 1. Fetch Feed & Shuffle
   useEffect(() => {
     const fetchFeed = async () => {
       try {
         const q = query(
           collection(db, "wallpapers"), 
           where("fileType", "==", "video"), 
-          limit(20) // Fetch a larger batch to shuffle
+          limit(25) 
         );
         const snap = await getDocs(q);
         const videoData = await Promise.all(snap.docs.map(async (d) => {
@@ -56,7 +61,7 @@ export default function Feed() {
           return { ...item, id: d.id, creator: userSnap.exists() ? userSnap.data() as UserData : undefined };
         }));
 
-        setVideos(shuffle(videoData)); // SHUFFLE VIDEOS HERE
+        setVideos(shuffle(videoData));
       } catch (e) { console.error(e); }
       setLoading(false);
     };
@@ -72,7 +77,6 @@ export default function Feed() {
     }
   }, [user]);
 
-  // 2. Real-time Comment Listener for Drawer
   useEffect(() => {
     if (!commentVid) return;
     const q = query(collection(db, `wallpapers/${commentVid}/comments`), orderBy("createdAt", "desc"));
@@ -122,7 +126,6 @@ export default function Feed() {
         )}
       </main>
 
-      {/* COMMENTS DRAWER */}
       {showComments && (
         <div className="fixed inset-0 z-[200]">
           <div className="drawer-mask" onClick={() => setShowComments(false)} />
@@ -131,7 +134,6 @@ export default function Feed() {
               <span className="text-xs font-black uppercase tracking-widest text-zinc-500">{comments.length} Comments</span>
               <button onClick={() => setShowComments(false)} className="p-2 bg-white/5 rounded-full"><X className="w-4 h-4"/></button>
             </div>
-            
             <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar">
               {comments.map((c) => (
                 <div key={c.id} className="flex gap-3">
@@ -143,14 +145,13 @@ export default function Feed() {
                 </div>
               ))}
             </div>
-
             <div className="p-4 bg-black border-t border-white/5 flex gap-2 items-center pb-safe">
               <input 
                 type="text" 
                 value={commentInput}
                 onChange={(e) => setCommentInput(e.target.value)}
                 placeholder="Add a comment..." 
-                className="flex-1 bg-zinc-900 border-none outline-none rounded-full px-5 py-3 text-sm"
+                className="flex-1 bg-zinc-900 border-none outline-none rounded-full px-5 py-3 text-sm text-white"
               />
               <button onClick={postComment} className="bg-red-600 p-3 rounded-full active:scale-90 transition"><Send className="w-4 h-4"/></button>
             </div>
@@ -163,14 +164,13 @@ export default function Feed() {
   );
 }
 
-function VideoSlide({ video, muted, setMuted, isFollowing, onComment }: any) {
+function VideoSlide({ video, muted, setMuted, isFollowing, onComment }: VideoSlideProps) {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [liked, setLiked] = useState(video.likes?.includes(user?.uid));
-  const [likesCount, setLikesCount] = useState(video.likes?.length || 0);
-  const [liveCommentCount, setLiveCommentCount] = useState(0);
+  const [liked, setLiked] = useState(video.likes?.includes(user?.uid || ""));
+  const [likesCount, setLikesCount] = useState<number>(video.likes?.length || 0);
+  const [liveCommentCount, setLiveCommentCount] = useState<number>(0);
 
-  // Real-time listener for this specific video's comment count
   useEffect(() => {
     const q = collection(db, `wallpapers/${video.id}/comments`);
     const unsub = onSnapshot(q, (snap) => {
@@ -196,10 +196,12 @@ function VideoSlide({ video, muted, setMuted, isFollowing, onComment }: any) {
     if (!user) return;
     const ref = doc(db, "wallpapers", video.id);
     if (liked) {
-      setLiked(false); setLikesCount(prev => prev - 1);
+      setLiked(false); 
+      setLikesCount((prev: number) => prev - 1);
       await updateDoc(ref, { likes: arrayRemove(user.uid) });
     } else {
-      setLiked(true); setLikesCount(prev => prev + 1);
+      setLiked(true); 
+      setLikesCount((prev: number) => prev + 1);
       await updateDoc(ref, { likes: arrayUnion(user.uid) });
     }
   };
@@ -226,6 +228,7 @@ function VideoSlide({ video, muted, setMuted, isFollowing, onComment }: any) {
             <img 
               src={video.creator?.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${video.userId}`} 
               className="w-12 h-12 rounded-full border-2 border-white object-cover" 
+              alt="avatar"
             />
           </Link>
           {!isFollowing && user?.uid !== video.userId && (
