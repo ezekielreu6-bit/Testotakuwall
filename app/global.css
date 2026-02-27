@@ -2,103 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  /* Exact Colors from your HTML files */
-  --otaku-red: #ef4444;
-  --otaku-black: #000000;
-  --otaku-dark: #050505;
-  --otaku-zinc: #1c1c1e; /* Apple-style dark grey used in your inputs */
-  --otaku-border: rgba(255, 255, 255, 0.08);
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
 }
 
-@layer base {
-  html {
-    -webkit-tap-highlight-color: transparent;
-    scroll-behavior: smooth;
-    background-color: var(--otaku-black);
-  }
-  
-  body {
-    background-color: var(--otaku-black);
-    color: #ffffff;
-    font-family: var(--font-jakarta), sans-serif;
-    overscroll-behavior-y: none;
-    user-select: none;
-    overflow-x: hidden;
-  }
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* This stops the white gap at the top */
+  background-color: #000000;
 }
 
-@layer components {
-  /* The Glass Effect from your headers */
-  .glass {
-    @apply bg-black/80 backdrop-blur-xl border-b border-white/5;
-  }
-
-  /* The Signature Red Button */
-  .btn-primary {
-    @apply bg-red-600 text-white font-black uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-red-900/20;
-  }
-
-  /* The Card style used in Inbox and Profile */
-  .otaku-card {
-    background-color: var(--otaku-zinc);
-    border: 1px solid var(--otaku-border);
-    @apply rounded-[24px] transition-all;
-  }
-
-  /* Chat Bubble Style */
-  .msg-bubble {
-    @apply relative px-4 py-3 rounded-[20px] max-w-[80%] text-[14px] leading-relaxed break-words;
-  }
-
-  /* Premium Card Glow */
-  .premium-card-active {
-    background: linear-gradient(145deg, #111, #050505);
-    border: 2px solid var(--otaku-red);
-    box-shadow: 0 0 40px rgba(239, 68, 68, 0.15);
-  }
+body {
+  @apply bg-black text-white;
+  -webkit-tap-highlight-color: transparent;
 }
 
-@layer utilities {
-  .no-scrollbar::-webkit-scrollbar { display: none; }
-  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  
-  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-  .pt-safe { padding-top: env(safe-area-inset-top); }
-
-  /* Text Shadow: Crucial for reading text over bright anime videos */
-  .text-shadow {
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 4px 12px rgba(0,0,0,0.5);
-  }
-
-  /* TikTok-style Snap Scroll */
-  .snap-container {
-    height: 100vh;
-    width: 100vw;
-    overflow-y: scroll;
-    scroll-snap-type: y mandatory;
-  }
-  
-  .snap-item {
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-    height: 100vh;
-    width: 100vw;
-  }
+/* Force centering and TikTok style scrolling */
+.feed-container {
+  height: 100vh;
+  width: 100vw;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Animations from your original logic */
-@keyframes pop {
-  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-  20% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+.feed-container::-webkit-scrollbar {
+  display: none;
 }
 
-.heart-pop {
-  animation: pop 0.8s ease-out forwards;
+.feed-item {
+  height: 100vh;
+  width: 100vw;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000;
 }
 
-/* Red Tick specific style if you want to apply filters to raw SVGs */
-.red-tick-filter {
-  filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.5));
+.text-shadow {
+  text-shadow: 0 2px 4px rgba(0,0,0,0.9);
 }
