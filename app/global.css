@@ -145,3 +145,11 @@ input[type=range]::-webkit-slider-thumb {
            transition-transform duration-300 border-t border-white/5 pb-safe max-h-[85vh] overflow-y-auto;
   }
 }
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-in.slide-in-from-right {
+  animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
