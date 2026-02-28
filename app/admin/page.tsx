@@ -197,7 +197,7 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main className="pt-24 px-5 max-w-6xl mx-auto">
+      <main className="scroll-container no-scrollbar pb-32">
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <StatCard title="Total Feed" count={stats.videos} color="border-l-red-500" />
