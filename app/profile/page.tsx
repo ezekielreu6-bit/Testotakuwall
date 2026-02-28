@@ -90,8 +90,7 @@ export default function ProfilePage() {
   if (!user || !userData) return <div className="h-screen bg-black" />;
 
   return (
-    <main className="min-h-screen bg-black text-white pb-32 overflow-x-hidden">
-      
+    <main className="scroll-container no-scrollbar pb-32">
       {/* 🟢 TOP HEADER */}
       <header className="fixed top-0 left-0 right-0 h-[65px] bg-black/80 backdrop-blur-xl border-b border-white/5 z-50 px-6 flex items-center justify-between pt-safe">
         <h1 className="text-xl font-black italic tracking-tighter"><span className="text-red-600">OTAKU</span>WALL</h1>
