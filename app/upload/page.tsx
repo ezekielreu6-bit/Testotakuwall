@@ -2,322 +2,341 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { 
+  collection, query, where, orderBy, onSnapshot, 
+  deleteDoc, doc, updateDoc, addDoc, serverTimestamp, getDocs, limit 
+} from "firebase/firestore";
 import { useAuth } from "@/components/AuthProvider";
 import { 
-  X, RefreshCw, Zap, Smile, Mic, Image as ImageIcon, 
-  ChevronLeft, ArrowLeft, Type, Music, VolumeX, Volume2,
-  Check, Download, Trash2
+  ArrowLeft, Power, Video, Image as ImageIcon, Radio, 
+  UploadCloud, BellRing, AlertTriangle, Trash2, ShieldBan,
+  Users, Activity, CheckCircle2, Search, MoreHorizontal
 } from "lucide-react";
+import { Wallpaper, Report, UserData } from "@/types";
 
-type UploadMode = 'story' | 'wallpaper' | 'shorts';
-type ViewState = 'camera' | 'studio' | 'post';
+// 🔐 List of Authorized Admins
+const ADMINS = ['ezekielojochenemi1@gmail.com', 'donnafonna5@gmail.com', 'njokupeter738@gmail.com'];
 
-export default function UploadStudio() {
-  const { user, userData } = useAuth();
+type AdminTab = 'videos' | 'static' | 'live' | 'users' | 'upload' | 'broadcast' | 'reports';
+
+export default function AdminDashboard() {
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Navigation State
-  const [view, setView] = useState<ViewState>('camera');
-  const [mode, setMode] = useState<UploadMode>('shorts');
-  
-  // Camera State
-  const [isRecording, setIsRecording] = useState(false);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
-  const [recTime, setRecTime] = useState(0);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  // --- UI State ---
+  const [activeTab, setActiveTab] = useState<AdminTab>('videos');
+  const [stats, setStats] = useState({ videos: 0, live: 0, static: 0, reports: 0, users: 0 });
+  const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [toast, setToast] = useState<{ msg: string; err: boolean } | null>(null);
 
-  // Media State
-  const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  
-  // Studio Tools State
-  const [activeFilter, setActiveFilter] = useState("none");
-  const [overlayText, setOverlayText] = useState("");
-  const [isMuted, setIsMuted] = useState(false);
-  const [caption, setCaption] = useState("");
+  // --- Action States ---
   const [uploading, setUploading] = useState(false);
-
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const [liveTitle, setLiveTitle] = useState("");
+  const [bcTitle, setBcTitle] = useState("");
+  const [bcMsg, setBcMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Initialize & Handle Camera Hardware
+  // 1. Security Check
   useEffect(() => {
-    if (!user) return;
-
-    const startStream = async () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: facingMode }, 
-          audio: true 
-        });
-        setStream(newStream);
-        if (videoRef.current) videoRef.current.srcObject = newStream;
-      } catch (err) {
-        console.error("Hardware error:", err);
+    if (!authLoading) {
+      if (!user || !user.email || !ADMINS.includes(user.email)) {
+        router.push('/');
       }
-    };
+    }
+  }, [user, authLoading, router]);
 
-    if (view === 'camera') startStream();
-
-    return () => stream?.getTracks().forEach(t => t.stop());
-  }, [view, facingMode, user]);
-
-  // 2. Timer for Recording
+  // 2. Data Listeners
   useEffect(() => {
-    let interval: any;
-    if (isRecording) {
-      interval = setInterval(() => setRecTime(p => p + 1), 1000);
-    } else {
-      setRecTime(0);
-    }
-    return () => clearInterval(interval);
-  }, [isRecording]);
+    if (!user || !ADMINS.includes(user.email || "")) return;
 
-  // --- CAMERA ACTIONS ---
+    // Fetch Stats
+    const unsubStats = onSnapshot(collection(db, "wallpapers"), (snap) => {
+      const docs = snap.docs.map(d => d.data());
+      setStats({
+        videos: docs.filter((d: any) => d.fileType === 'video' && !d.isLive).length,
+        live: docs.filter((d: any) => d.isLive).length,
+        static: docs.filter((d: any) => d.fileType === 'image').length,
+        reports: reports.length,
+        users: allUsers.length
+      });
+    });
 
-  const flipCamera = () => {
-    setFacingMode(prev => prev === "user" ? "environment" : "user");
+    // Fetch All Users
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+      setAllUsers(snap.docs.map(d => ({ ...d.data(), uid: d.id } as UserData)));
+    });
+
+    // Fetch Content based on Tab
+    let wallQ = query(collection(db, "wallpapers"), orderBy("createdAt", "desc"));
+    if (activeTab === 'videos') wallQ = query(wallQ, where("fileType", "==", "video"), where("isLive", "==", false));
+    if (activeTab === 'static') wallQ = query(wallQ, where("fileType", "==", "image"));
+    if (activeTab === 'live') wallQ = query(wallQ, where("isLive", "==", true));
+
+    const unsubWalls = onSnapshot(wallQ, (snap) => {
+      setWallpapers(snap.docs.map(d => ({ ...d.data(), id: d.id } as Wallpaper)));
+    });
+
+    // Fetch Reports
+    const unsubRep = onSnapshot(query(collection(db, "reports"), orderBy("timestamp", "desc")), (snap) => {
+      setReports(snap.docs.map(d => ({ ...d.data(), id: d.id } as Report)));
+    });
+
+    return () => { unsubStats(); unsubUsers(); unsubWalls(); unsubRep(); };
+  }, [user, activeTab, reports.length, allUsers.length]);
+
+  const showToast = (msg: string, err = false) => {
+    setToast({ msg, err });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const capturePhoto = () => {
-    if (!videoRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    
-    if (facingMode === "user") {
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.drawImage(videoRef.current, 0, 0);
-    
-    canvas.toBlob((blob) => {
-      if (blob) {
-        setMediaBlob(blob);
-        setPreviewUrl(URL.createObjectURL(blob));
-        setView('studio');
-      }
-    }, "image/jpeg", 0.9);
+  // --- ADMIN ACTIONS ---
+
+  const handleDelete = async (col: string, id: string) => {
+    if (!confirm("This action is permanent. Delete?")) return;
+    try {
+      await deleteDoc(doc(db, col, id));
+      showToast("Data Purged Successfully");
+    } catch (e) { showToast("Purge Failed", true); }
   };
 
-  const startVideo = () => {
-    if (!stream) return;
-    chunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/mp4' });
-      setMediaBlob(blob);
-      setPreviewUrl(URL.createObjectURL(blob));
-      setView('studio');
-    };
-    recorder.start();
-    mediaRecorderRef.current = recorder;
-    setIsRecording(true);
+  const toggleBan = async (targetUser: UserData) => {
+    const action = targetUser.banned ? "Unban" : "Ban";
+    if (!confirm(`${action} @${targetUser.username}?`)) return;
+    try {
+      await updateDoc(doc(db, "users", targetUser.uid), { banned: !targetUser.banned });
+      showToast(`User ${action}ned`);
+    } catch (e) { showToast("Access Denied", true); }
   };
 
-  const stopVideo = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
-  };
+  const handleLiveUpload = async () => {
+    const file = fileInputRef.current?.files?.[0];
+    if (!file || !liveTitle) return showToast("Title & Video Required", true);
 
-  const handleShutter = () => {
-    if (mode === 'wallpaper') return capturePhoto();
-    if (mode === 'shorts') {
-        if (isRecording) stopVideo();
-        else startVideo();
-        return;
-    }
-    // Story handles both: single tap photo, hold video (simplified here to tap photo)
-    capturePhoto(); 
-  };
-
-  // --- UPLOAD LOGIC ---
-
-  const handleFinalPublish = async () => {
-    if (!mediaBlob || !user || !userData) return;
     setUploading(true);
-
-    const isVideo = mediaBlob.type.startsWith('video');
     const formData = new FormData();
-    formData.append("file", mediaBlob);
+    formData.append("file", file);
     formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
 
     try {
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/${isVideo ? 'video' : 'image'}/upload`, {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload`, {
         method: "POST", body: formData
       });
       const data = await res.json();
 
       await addDoc(collection(db, "wallpapers"), {
-        title: caption || "Otaku Sync",
+        title: liveTitle,
         url: data.secure_url,
-        fileType: isVideo ? 'video' : 'image',
-        category: mode, // 'story', 'wallpaper', 'shorts'
-        isStory: mode === 'story',
-        isLive: false, // Only admin can set isLive: true
-        userId: user.uid,
-        username: userData.username,
+        fileType: 'video',
+        isLive: true,
+        userId: user!.uid,
+        username: "ADMIN",
         createdAt: serverTimestamp(),
         likes: [],
-        views: 0,
-        filter: activeFilter,
-        overlayText: overlayText
+        views: 0
       });
 
-      router.push('/');
-    } catch (e) {
-      alert("Upload failed");
-      setUploading(false);
-    }
+      showToast("Live Wallpaper Verified & Published!");
+      setLiveTitle("");
+    } catch (e) { showToast("Upload Logic Error", true); }
+    finally { setUploading(false); }
   };
 
+  const sendBroadcast = async () => {
+    if (!bcTitle || !bcMsg) return showToast("Broadcast is empty", true);
+    try {
+      await addDoc(collection(db, "platform_notifications"), {
+        title: bcTitle,
+        message: bcMsg,
+        createdAt: serverTimestamp(),
+        type: 'alert'
+      });
+      showToast("Global Alert Sent! 📢");
+      setBcTitle(""); setBcMsg("");
+    } catch (e) { showToast("Broadcast Failed", true); }
+  };
+
+  if (authLoading || !user) return <div className="h-screen bg-black" />;
+
   return (
-    <main className="h-screen w-screen bg-black text-white overflow-hidden relative">
+    <div className="min-h-screen bg-[#050505] text-white pb-20">
       
-      {/* 🟢 VIEW 1: CAMERA */}
-      {view === 'camera' && (
-        <div className="h-full w-full relative animate-in fade-in duration-500">
-          <video 
-            ref={videoRef} autoPlay playsInline muted 
-            className={`w-full h-full object-cover ${facingMode === 'user' ? 'transform -scale-x-100' : ''}`} 
-          />
-          
-          {/* Top Controls */}
-          <div className="absolute top-0 w-full p-6 flex justify-between items-center z-50 pt-safe">
-            <button onClick={() => router.back()} className="p-2 bg-black/20 backdrop-blur-md rounded-full"><X/></button>
-            {isRecording && (
-                <div className="bg-red-600 px-4 py-1.5 rounded-full font-black text-[10px] animate-pulse">
-                    00:{String(recTime).padStart(2, '0')}
-                </div>
-            )}
-            <button onClick={flipCamera} className="p-2 bg-black/20 backdrop-blur-md rounded-full active:rotate-180 transition-transform duration-500">
-                <RefreshCw/>
-            </button>
-          </div>
-
-          {/* Shutter Area */}
-          <div className="absolute bottom-0 w-full h-64 bg-gradient-to-t from-black/90 to-transparent flex flex-col items-center justify-end pb-10">
-            
-            <div className="flex items-center gap-12 mb-8">
-                <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1 opacity-60">
-                    <div className="w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center border border-white/10"><ImageIcon className="w-5 h-5"/></div>
-                    <span className="text-[9px] font-black uppercase">Gallery</span>
-                </button>
-                <input type="file" ref={fileInputRef} hidden onChange={(e) => {
-                   const f = e.target.files?.[0];
-                   if(f) { setMediaBlob(f); setPreviewUrl(URL.createObjectURL(f)); setView('studio'); }
-                }} />
-
-                <button onClick={handleShutter} className={`w-20 h-20 rounded-full border-4 border-white p-1 transition-all ${isRecording ? 'scale-110 border-red-600' : ''}`}>
-                    <div className={`w-full h-full bg-red-600 transition-all ${isRecording ? 'rounded-xl scale-50' : 'rounded-full'}`} />
-                </button>
-
-                <button className="flex flex-col items-center gap-1 opacity-60">
-                    <div className="w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center border border-white/10"><Zap className="w-5 h-5"/></div>
-                    <span className="text-[9px] font-black uppercase">Flash</span>
-                </button>
-            </div>
-
-            {/* Mode Tabs */}
-            <div className="flex gap-8 text-[11px] font-black uppercase tracking-widest">
-                <button onClick={() => setMode('story')} className={mode === 'story' ? 'text-white' : 'text-zinc-600'}>Story</button>
-                <button onClick={() => setMode('shorts')} className={mode === 'shorts' ? 'text-white border-b-2 border-red-600 pb-1' : 'text-zinc-600'}>Shorts</button>
-                <button onClick={() => setMode('wallpaper')} className={mode === 'wallpaper' ? 'text-white' : 'text-zinc-600'}>Wallpapers</button>
-            </div>
-          </div>
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-4 rounded-2xl z-[1000] shadow-2xl flex items-center gap-3 border-l-4 animate-in slide-in-from-bottom-4 ${toast.err ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-red-600 text-white'}`}>
+          <Activity className="w-5 h-5"/>
+          <span className="font-black text-xs uppercase tracking-widest">{toast.msg}</span>
         </div>
       )}
 
-      {/* 🔵 VIEW 2: STUDIO EDITOR */}
-      {view === 'studio' && (
-        <div className="h-full w-full flex flex-col bg-zinc-950 animate-in slide-in-from-right duration-500">
-           <header className="p-5 flex justify-between items-center bg-black border-b border-white/5 pt-safe">
-              <button onClick={() => setView('camera')}><ChevronLeft/></button>
-              <h3 className="font-black italic text-red-500">OTAKU STUDIO</h3>
-              <button onClick={() => setView('post')} className="bg-red-600 px-6 py-2 rounded-xl font-black text-xs">NEXT</button>
-           </header>
-
-           <div className="flex-1 relative flex items-center justify-center overflow-hidden">
-              {mediaBlob?.type.startsWith('video') ? (
-                <video src={previewUrl!} autoPlay loop playsInline muted={isMuted} className="w-full h-full object-contain" style={{ filter: activeFilter }} />
-              ) : (
-                <img src={previewUrl!} className="w-full h-full object-contain" style={{ filter: activeFilter }} alt="preview" />
-              )}
-              
-              {overlayText && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="bg-red-600 px-4 py-2 rounded-xl font-black text-2xl shadow-2xl animate-bounce">
-                        {overlayText}
-                    </span>
-                </div>
-              )}
-           </div>
-
-           {/* Toolbar */}
-           <div className="bg-black p-6 flex justify-around border-t border-white/5 pb-10">
-              <StudioTool icon={<Smile/>} label="Filters" onClick={() => setActiveFilter(activeFilter === 'none' ? 'grayscale(1)' : 'none')} />
-              <StudioTool icon={<Type/>} label="Text" onClick={() => setOverlayText(prompt("Add Caption Overlay:") || "")} />
-              {mediaBlob?.type.startsWith('video') && (
-                <StudioTool icon={isMuted ? <VolumeX/> : <Volume2/>} label="Audio" onClick={() => setIsMuted(!isMuted)} />
-              )}
-              <StudioTool icon={<Trash2 className="text-red-500"/>} label="Discard" onClick={() => setView('camera')} />
-           </div>
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <button onClick={() => router.push('/')} className="p-2 bg-white/5 rounded-xl text-zinc-400 hover:text-white transition"><ArrowLeft/></button>
+          <h1 className="font-black italic text-lg tracking-tighter">ADMIN COMMAND</h1>
         </div>
-      )}
+        <button onClick={() => auth.signOut()} className="p-2.5 bg-red-600/10 text-red-500 rounded-xl active:scale-90 transition"><Power className="w-5 h-5"/></button>
+      </header>
 
-      {/* 🟡 VIEW 3: FINAL POST */}
-      {view === 'post' && (
-        <div className="h-full w-full bg-black flex flex-col animate-in slide-in-from-bottom duration-500">
-           <header className="p-5 border-b border-white/5 pt-safe flex items-center gap-4">
-              <button onClick={() => setView('studio')}><ArrowLeft/></button>
-              <h3 className="font-bold">New {mode}</h3>
-           </header>
+      <main className="pt-24 px-6 max-w-7xl mx-auto">
+        
+        {/* Stats Section */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
+          <StatCard label="Videos" value={stats.videos} icon={<Video className="text-red-500"/>} />
+          <StatCard label="Live Walls" value={stats.live} icon={<Radio className="text-purple-500"/>} />
+          <StatCard label="Static" value={stats.static} icon={<ImageIcon className="text-green-500"/>} />
+          <StatCard label="Users" value={stats.users} icon={<Users className="text-blue-500"/>} />
+          <StatCard label="Reports" value={stats.reports} icon={<AlertTriangle className="text-yellow-500"/>} />
+        </div>
 
-           <div className="p-6 flex gap-4 border-b border-white/5">
-              <div className="w-24 h-36 bg-zinc-900 rounded-2xl overflow-hidden border border-white/10 shrink-0">
-                 {mediaBlob?.type.startsWith('video') ? <video src={previewUrl!} className="w-full h-full object-cover opacity-50" /> : <img src={previewUrl!} className="w-full h-full object-cover opacity-50" alt="thumb" />}
+        {/* Tab Navigation */}
+        <div className="flex overflow-x-auto gap-3 no-scrollbar mb-8 pb-2">
+          <AdminTabBtn active={activeTab === 'videos'} label="Shorts Feed" onClick={() => setActiveTab('videos')} />
+          <AdminTabBtn active={activeTab === 'static'} label="Static Walls" onClick={() => setActiveTab('static')} />
+          <AdminTabBtn active={activeTab === 'live'} label="Live Walls" onClick={() => setActiveTab('live')} />
+          <AdminTabBtn active={activeTab === 'users'} label="User Bans" onClick={() => setActiveTab('users')} />
+          <AdminTabBtn active={activeTab === 'upload'} label="Upload Pro" onClick={() => setActiveTab('upload')} />
+          <AdminTabBtn active={activeTab === 'broadcast'} label="Broadcast" onClick={() => setActiveTab('broadcast')} />
+          <AdminTabBtn active={activeTab === 'reports'} label={`Reports (${reports.length})`} onClick={() => setActiveTab('reports')} />
+        </div>
+
+        {/* 🎥 CONTENT PANELS (Videos/Static/Live) */}
+        {['videos', 'static', 'live'].includes(activeTab) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500">
+            {wallpapers.map(wall => (
+              <div key={wall.id} className="bg-zinc-900/50 rounded-[32px] border border-white/5 overflow-hidden group">
+                <div className="aspect-[9/16] relative bg-black">
+                  {wall.fileType === 'video' ? (
+                    <video src={`${wall.url}#t=0.5`} className="w-full h-full object-cover opacity-60" muted />
+                  ) : (
+                    <img src={wall.url} className="w-full h-full object-cover opacity-60" alt="wall" />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => handleDelete('wallpapers', wall.id)} className="p-4 bg-red-600 rounded-full shadow-2xl active:scale-90 transition"><Trash2 className="w-6 h-6"/></button>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <p className="text-xs font-black truncate mb-1 uppercase tracking-widest">{wall.title}</p>
+                  <p className="text-[10px] text-zinc-500 font-bold">BY @{wall.username}</p>
+                </div>
               </div>
-              <textarea 
-                placeholder="Write a caption... #anime #otaku"
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                className="flex-1 bg-transparent border-none outline-none text-sm resize-none pt-2 font-medium"
-              />
-           </div>
+            ))}
+          </div>
+        )}
 
-           <div className="mt-auto p-6 pb-12 flex gap-3 bg-zinc-950 border-t border-white/5">
-              <button onClick={() => router.push('/')} className="flex-1 py-4 bg-zinc-900 rounded-2xl font-black text-xs uppercase border border-white/5">Cancel</button>
+        {/* 👥 USER MANAGEMENT PANEL */}
+        {activeTab === 'users' && (
+          <div className="bg-zinc-900/30 rounded-[35px] border border-white/5 overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+              <h3 className="font-black text-sm uppercase tracking-widest">Active Database Users</h3>
+              <Search className="w-5 h-5 text-zinc-600" />
+            </div>
+            <div className="divide-y divide-white/5">
+              {allUsers.map(u => (
+                <div key={u.uid} className="p-5 flex items-center justify-between hover:bg-white/5 transition">
+                  <div className="flex items-center gap-4">
+                    <img src={u.photoURL} className="w-12 h-12 rounded-2xl object-cover border border-white/10" alt="u"/>
+                    <div>
+                      <p className="font-black text-sm">@{u.username}</p>
+                      <p className="text-[10px] text-zinc-500 font-medium">{u.email}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => toggleBan(u)}
+                    className={`px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-tighter transition ${u.banned ? 'bg-green-600/10 text-green-500' : 'bg-red-600/10 text-red-500'}`}
+                  >
+                    {u.banned ? 'Unban User' : 'Ban User'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 ADMIN UPLOAD PANEL */}
+        {activeTab === 'upload' && (
+          <div className="max-w-xl mx-auto bg-zinc-900/50 p-10 rounded-[40px] border border-purple-900/20 shadow-2xl">
+            <h2 className="text-2xl font-black italic mb-8 flex items-center gap-3"><Radio className="text-purple-500"/> Publish Live Sync</h2>
+            <div className="space-y-6">
+              <input value={liveTitle} onChange={e => setLiveTitle(e.target.value)} placeholder="Wallpaper Title" className="w-full bg-black border border-white/5 p-5 rounded-3xl outline-none focus:border-purple-500 transition" />
+              <label className="block w-full p-16 border-2 border-dashed border-zinc-800 rounded-[40px] text-center cursor-pointer hover:border-purple-500 transition bg-black group">
+                <input type="file" ref={fileInputRef} hidden accept="video/mp4" />
+                <UploadCloud className="mx-auto mb-4 text-zinc-600 w-10 h-10 group-hover:text-purple-500 transition" />
+                <p className="text-xs text-zinc-500 font-black uppercase tracking-widest">Target MP4 File</p>
+              </label>
               <button 
-                onClick={handleFinalPublish}
+                onClick={handleLiveUpload} 
                 disabled={uploading}
-                className="flex-[2] py-4 bg-red-600 rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-900/40 active:scale-95 transition disabled:opacity-50"
+                className="w-full bg-purple-600 py-5 rounded-3xl font-black shadow-xl active:scale-95 transition disabled:opacity-50"
               >
-                {uploading ? 'Processing Sync...' : 'Publish Content'}
+                {uploading ? 'Transcoding...' : 'Verify & Launch'}
               </button>
-           </div>
-        </div>
-      )}
+            </div>
+          </div>
+        )}
 
-    </main>
+        {/* 📢 BROADCAST PANEL */}
+        {activeTab === 'broadcast' && (
+          <div className="max-w-xl mx-auto bg-zinc-900/50 p-10 rounded-[40px] border border-red-900/20 shadow-2xl">
+            <h2 className="text-2xl font-black italic mb-8 flex items-center gap-3"><BellRing className="text-red-600"/> Platform Update</h2>
+            <div className="space-y-4">
+              <input value={bcTitle} onChange={e => setBcTitle(e.target.value)} placeholder="Subject line" className="w-full bg-black border border-white/5 p-5 rounded-3xl outline-none focus:border-red-600 transition" />
+              <textarea value={bcMsg} onChange={e => setBcMsg(e.target.value)} placeholder="Message content..." className="w-full bg-black border border-white/5 p-5 rounded-3xl h-40 outline-none focus:border-red-600 transition resize-none" />
+              <button onClick={sendBroadcast} className="w-full bg-red-600 py-5 rounded-3xl font-black shadow-xl active:scale-95 transition">SEND TO ALL INBOXES</button>
+            </div>
+          </div>
+        )}
+
+        {/* 🚩 REPORTS PANEL */}
+        {activeTab === 'reports' && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 animate-in slide-in-from-bottom-5">
+            {reports.map(r => (
+              <div key={r.id} className="bg-zinc-900/80 rounded-[35px] p-6 border border-yellow-600/20 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-yellow-600/10 rounded-xl text-yellow-500"><AlertTriangle className="w-5 h-5"/></div>
+                    <p className="text-sm font-black italic uppercase tracking-tighter">{r.reason}</p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 font-medium break-all mb-6 px-1">CONTENT_ID: {r.contentId}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { handleDelete('wallpapers', r.contentId); handleDelete('reports', r.id); }} className="flex-1 bg-red-600 py-4 rounded-2xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition">Purge Content</button>
+                  <button onClick={() => handleDelete('reports', r.id)} className="flex-1 bg-zinc-800 py-4 rounded-2xl text-[10px] font-black uppercase active:scale-95 transition">Dismiss</button>
+                </div>
+              </div>
+            ))}
+            {reports.length === 0 && <div className="col-span-full text-center py-40 opacity-20"><Activity className="mx-auto w-16 h-16 mb-4"/><p className="font-black text-xs uppercase tracking-widest">Database is clean</p></div>}
+          </div>
+        )}
+
+      </main>
+    </div>
   );
 }
 
-// --- HELPER COMPONENTS ---
+// --- DASHBOARD SUB-COMPONENTS ---
 
-function StudioTool({ icon, label, onClick }: any) {
+function StatCard({ label, value, icon }: any) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-2 active:scale-90 transition">
-        <div className="w-12 h-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-zinc-400 border border-white/5">
-            {icon}
-        </div>
-        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{label}</span>
+    <div className="bg-zinc-900/50 rounded-[30px] p-6 border border-white/5 shadow-xl">
+      <div className="flex justify-between items-start mb-4">
+        <div className="p-2.5 bg-black/40 rounded-2xl border border-white/5">{icon}</div>
+        <CheckCircle2 className="w-4 h-4 text-zinc-800" />
+      </div>
+      <p className="text-2xl font-black italic mb-0.5">{value.toLocaleString()}</p>
+      <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">{label}</p>
+    </div>
+  );
+}
+
+function AdminTabBtn({ active, label, onClick }: any) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap ${active ? 'bg-red-600 text-white shadow-xl shadow-red-900/30 -translate-y-1' : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300 border border-white/5'}`}
+    >
+      {label}
     </button>
   );
 }
