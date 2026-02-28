@@ -153,3 +153,16 @@ input[type=range]::-webkit-slider-thumb {
 .animate-in.slide-in-from-right {
   animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
+/* Fix: Hide sub-views completely unless 'translate-x-0' is applied */
+.sub-view-container {
+  pointer-events: none;
+}
+
+.sub-view-container.open {
+  pointer-events: auto;
+}
+
+/* Ensure sub-view is always to the right by default */
+[class*="sub-view"] {
+  will-change: transform;
+}
