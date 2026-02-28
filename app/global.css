@@ -135,3 +135,13 @@ input[type=range]::-webkit-slider-runnable-track {
 input[type=range]::-webkit-slider-thumb {
   @apply appearance-none h-5 w-5 rounded-full bg-red-600 border-2 border-white -mt-2 shadow-lg;
 }
+@layer utilities {
+  .drawer-mask {
+    @apply fixed inset-0 bg-black/60 z-[150] transition-opacity duration-300;
+  }
+
+  .drawer-content {
+    @apply fixed bottom-0 left-0 right-0 bg-[#161616] rounded-t-[32px] z-[160] 
+           transition-transform duration-300 border-t border-white/5 pb-safe max-h-[85vh] overflow-y-auto;
+  }
+}
