@@ -11,6 +11,7 @@ export interface UserData {
   createdAt?: any;
   premiumPlan?: string;
   premiumExpiry?: any;
+  blockedUids?: string[]; // This fixes your build error
 }
 
 export interface Wallpaper {
@@ -21,9 +22,9 @@ export interface Wallpaper {
   userId: string;
   username: string;
   isLive?: boolean;
-  isStory?: boolean;     // Added for Story logic
-  category?: string;    // Added for Filtering
-  repostedFrom?: string; // This fixes your specific build error
+  isStory?: boolean;
+  category?: string;
+  repostedFrom?: string;
   likes: string[];
   views: number;
   createdAt: any;
@@ -38,17 +39,14 @@ export interface Chat {
   lastMsg?: string;
   isGroup: boolean;
   ownerId?: string;
-  pinnedBy?: string[];
+  pinnedBy?: string[]; // Ensures pinning logic works
   syncCount?: number;
   unread?: Record<string, number>;
 }
 
-// types/index.ts
-
 export interface Message {
   id: string;
   text?: string;
-  // Added 'sticker' here to allow the comparison
   type?: 'text' | 'video' | 'poll' | 'sticker'; 
   senderId: string;
   timestamp: any;
@@ -56,6 +54,7 @@ export interface Message {
   mediaUrl?: string;
   options?: { text: string; votes: string[] }[];
 }
+
 export interface Report {
   id: string;
   contentId: string;
