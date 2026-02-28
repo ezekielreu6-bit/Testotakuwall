@@ -8,6 +8,7 @@
   --otaku-zinc: #1c1c1e;
   --otaku-black: #000000;
 }
+
 * {
   margin: 0;
   padding: 0;
@@ -15,11 +16,11 @@
 }
 
 html, body {
-  height: 100dvh; /* Dynamic viewport height for mobile browser bars */
+  height: 100dvh; /* Dynamic viewport height */
   width: 100vw;
-  overflow: hidden; /* Lock the main window to prevent white gaps */
+  overflow: hidden; /* Lock the main window */
   background-color: var(--otaku-black);
-  position: fixed;
+  position: fixed; /* Stop pull-to-refresh and browser bouncing */
 }
 
 @layer base {
@@ -43,19 +44,30 @@ html, body {
     @apply bg-red-600 text-white font-black uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-red-900/20;
   }
 
-  /* CHAT BUBBLES (From your original messages.html) */
+  /* CHAT BUBBLES */
   .msg-bubble {
-    @apply relative px-4 py-3 rounded-[20px] max-w-[80%] text-[14px] leading-relaxed break-words shadow-sm;
+    @apply relative px-4 py-2.5 rounded-[20px] max-w-[80%] text-[15px] leading-normal break-words shadow-sm;
   }
 
-  /* CARDS (From your profile/inbox) */
+  /* CARDS */
   .otaku-card {
     @apply bg-zinc-900/50 border border-white/5 rounded-[24px] overflow-hidden transition-all;
   }
 }
 
 @layer utilities {
-  /* 2. TIKTOK / FEED LAYOUT ENGINE */
+  /* 2. SCROLLING ENGINE */
+  
+  /* Use this on <main> for pages like Profile, Inbox, Category */
+  .scroll-container {
+    height: 100dvh;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* TikTok / Feed Layout (keeps snap behavior) */
   .feed-container {
     height: 100dvh;
     width: 100vw;
@@ -75,9 +87,10 @@ html, body {
     @apply relative flex items-center justify-center bg-black;
   }
 
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
   /* 3. LOADING & ANIMATIONS */
-  
-  /* Skeleton Shimmer */
   .skeleton {
     @apply bg-zinc-900 relative overflow-hidden;
   }
@@ -88,31 +101,35 @@ html, body {
     animation: shimmer 1.5s infinite;
   }
 
-  /* Spinner Loader */
   .otaku-spinner {
     @apply w-8 h-8 border-[3px] border-red-600/20 border-t-red-600 rounded-full animate-spin;
   }
 
-  /* Heart Pop Animation */
-  .animate-heart-pop {
-    animation: heartPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  /* 4. DRAWERS & SUB-VIEWS */
+  .drawer-mask {
+    @apply fixed inset-0 bg-black/60 z-[150] transition-opacity duration-300;
   }
 
-  /* 4. POSITIONING & SAFE AREAS */
+  .drawer-content {
+    @apply fixed bottom-0 left-0 right-0 bg-[#161616] rounded-t-[32px] z-[160] 
+           transition-transform duration-300 border-t border-white/5 pb-safe max-h-[85vh] overflow-y-auto;
+  }
+
+  /* Sliding sub-view panels (Inbox system alerts, etc) */
+  .sub-view {
+    @apply fixed inset-0 bg-black z-[200] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] translate-x-full;
+    will-change: transform;
+  }
+  .sub-view.open {
+    @apply translate-x-0;
+  }
+
+  /* 5. POSITIONING & SAFE AREAS */
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pt-safe { padding-top: env(safe-area-inset-top); }
 
   .text-shadow {
     text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 4px 10px rgba(0,0,0,0.5);
-  }
-
-  /* 5. DRAWERS & MODALS */
-  .drawer-mask {
-    @apply fixed inset-0 bg-black/60 z-[150] transition-opacity duration-300;
-  }
-  .drawer-content {
-    @apply fixed bottom-0 left-0 right-0 bg-[#161616] rounded-t-[32px] z-[160] 
-           transition-transform duration-300 border-t border-white/5 pb-safe;
   }
 }
 
@@ -125,6 +142,15 @@ html, body {
   100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
 }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-in.slide-in-from-right {
+  animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
 /* Range Input for Ad Budget Slider */
 input[type=range] {
   @apply w-full bg-transparent appearance-none cursor-pointer;
@@ -134,35 +160,4 @@ input[type=range]::-webkit-slider-runnable-track {
 }
 input[type=range]::-webkit-slider-thumb {
   @apply appearance-none h-5 w-5 rounded-full bg-red-600 border-2 border-white -mt-2 shadow-lg;
-}
-@layer utilities {
-  .drawer-mask {
-    @apply fixed inset-0 bg-black/60 z-[150] transition-opacity duration-300;
-  }
-
-  .drawer-content {
-    @apply fixed bottom-0 left-0 right-0 bg-[#161616] rounded-t-[32px] z-[160] 
-           transition-transform duration-300 border-t border-white/5 pb-safe max-h-[85vh] overflow-y-auto;
-  }
-}
-@keyframes slideInRight {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-.animate-in.slide-in-from-right {
-  animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-/* Fix: Hide sub-views completely unless 'translate-x-0' is applied */
-.sub-view-container {
-  pointer-events: none;
-}
-
-.sub-view-container.open {
-  pointer-events: auto;
-}
-
-/* Ensure sub-view is always to the right by default */
-[class*="sub-view"] {
-  will-change: transform;
 }
