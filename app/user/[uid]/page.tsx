@@ -84,7 +84,7 @@ export default function ViewProfilePage() {
   if (!targetUser) return <div className="h-screen bg-black" />;
 
   return (
-    <main className="min-h-screen bg-black text-white pb-24">
+    <main className="scroll-container no-scrollbar pb-32">
       <header className="fixed top-0 w-full h-[60px] bg-black/90 backdrop-blur-md border-b border-zinc-900 flex items-center justify-between px-4 z-40">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()}><ArrowLeft className="w-6 h-6" /></button>
