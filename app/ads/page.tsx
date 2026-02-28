@@ -131,8 +131,7 @@ export default function CreateAdPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white pb-32 relative">
-      
+    <main className="scroll-container no-scrollbar pb-32">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-24 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full font-bold text-sm shadow-2xl z-50 animate-in slide-in-from-top-4 border-l-4 ${toast.err ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-green-500 text-green-500'}`}>
