@@ -11,7 +11,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { 
   Settings, Share2, Camera, Grid, Image as ImageIcon, 
   Heart, X, LogOut, ChevronRight, User, TrendingUp, 
-  Lock, FileText, Trash2, ShieldCheck, CheckCircle2,Play
+  Lock, FileText, Trash2, ShieldCheck, CheckCircle2,Play,ArrowLeft
 } from "lucide-react";
 import { Wallpaper } from "@/types";
 import Navbar from "@/components/Navbar";
