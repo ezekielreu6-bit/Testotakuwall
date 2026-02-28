@@ -196,7 +196,7 @@ export default function ChatRoom() {
 
 // --- MESSAGE COMPONENT ---
 
-function ChatMessage({ message, currentUid, onLongPress }: { message: Message, currentUid: string, onLongPress: any }) {
+function ChatMessage({ message, currentUid, onLongPress }: { message: any, currentUid: string, onLongPress: any }) {
   const isMe = message.senderId === currentUid;
   const watchUrlRegex = /\/watch\/([a-zA-Z0-9_-]+)/;
   const match = message.text?.match(watchUrlRegex);
@@ -210,8 +210,13 @@ function ChatMessage({ message, currentUid, onLongPress }: { message: Message, c
     >
       <div className="relative flex flex-col gap-1 max-w-[85%]">
         
-        {message.type === 'sticker' ? (
-          <img src={message.mediaUrl} className="w-32 h-32 object-contain animate-in zoom-in duration-200" />
+        {/* FIX: Use (message.type as string) to allow 'sticker' comparison */}
+        {(message.type as string) === 'sticker' ? (
+          <img 
+            src={message.mediaUrl} 
+            className="w-32 h-32 object-contain animate-in zoom-in duration-200" 
+            alt="sticker"
+          />
         ) : (
           <div className={`msg-bubble shadow-xl ${isMe ? 'bg-red-600 text-white rounded-br-none' : 'bg-zinc-800 text-zinc-100 rounded-bl-none'}`}>
             {message.text}
@@ -228,7 +233,6 @@ function ChatMessage({ message, currentUid, onLongPress }: { message: Message, c
     </div>
   );
 }
-
 // --- VIDEO PREVIEW ---
 
 function VideoLinkPreview({ videoId, isMe }: { videoId: string, isMe: boolean }) {
