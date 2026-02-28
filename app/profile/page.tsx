@@ -31,7 +31,7 @@ export default function ProfilePage() {
   const [stats, setStats] = useState({ followers: 0, following: 0, likes: 0 });
   const [loading, setLoading] = useState(true);
   
-  // --- Modal & Sub-view State ---
+  // --- Modals & Sub-view State ---
   const [showSettings, setShowSettings] = useState(false);
   const [settingsView, setSettingsView] = useState<SettingsView>('main');
   const [showEdit, setShowEdit] = useState(false);
@@ -53,11 +53,9 @@ export default function ProfilePage() {
     setEditName(userData?.username || "");
     setEditBio(userData?.bio || "");
 
-    // Real-time stats
     const unsubFollowers = onSnapshot(collection(db, `users/${user.uid}/followers`), (s) => setStats(prev => ({...prev, followers: s.size})));
     const unsubFollowing = onSnapshot(collection(db, `users/${user.uid}/following`), (s) => setStats(prev => ({...prev, following: s.size})));
 
-    // User content
     const q = query(collection(db, "wallpapers"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
     const unsubWalls = onSnapshot(q, (snap) => {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Wallpaper));
@@ -70,13 +68,12 @@ export default function ProfilePage() {
     return () => { unsubFollowers(); unsubFollowing(); unsubWalls(); };
   }, [user, userData]);
 
-  // 2. Notification System
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 3. Avatar & Photo Handlers
+  // 2. Avatar Engine
   const openAvatarPicker = () => {
     const seeds = Array.from({ length: 12 }, () => Math.random().toString(36).substring(7));
     setRandomSeeds(seeds);
@@ -89,14 +86,14 @@ export default function ProfilePage() {
     try {
       await updateDoc(doc(db, "users", user.uid), { photoURL: url });
       setShowAvatarPicker(false);
-      showToast("Avatar Synchronized!");
-    } catch (e) { showToast("Failed to sync", "error"); }
+      showToast("Avatar Updated!");
+    } catch (e) { showToast("Failed to update", "error"); }
   };
 
   const handleCustomUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    showToast("Uploading File...");
+    showToast("Syncing Photo...");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
@@ -106,7 +103,7 @@ export default function ProfilePage() {
       });
       const data = await res.json();
       await updateDoc(doc(db, "users", user.uid), { photoURL: data.secure_url });
-      showToast("Profile Photo Updated!");
+      showToast("Photo Updated!");
     } catch (err) { showToast("Upload failed", "error"); }
   };
 
@@ -117,7 +114,7 @@ export default function ProfilePage() {
       bio: editBio
     });
     setShowEdit(false);
-    showToast("Profile Saved Successfully!");
+    showToast("Profile Saved!");
   };
 
   if (!user || !userData) return <div className="h-screen bg-black" />;
@@ -131,14 +128,19 @@ export default function ProfilePage() {
           toast.type === 'error' ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-red-600 text-white'
         }`}>
           {toast.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
-          <span className="font-bold text-xs uppercase tracking-widest">{toast.msg}</span>
+          <span className="font-bold text-xs uppercase tracking-widest text-shadow">{toast.msg}</span>
         </div>
       )}
 
       {/* 🟢 FIXED HEADER */}
       <header className="fixed top-0 left-0 right-0 h-[65px] bg-black/80 backdrop-blur-xl border-b border-white/5 z-50 px-6 flex items-center justify-between pt-safe">
         <h1 className="text-xl font-black italic tracking-tighter"><span className="text-red-600">OTAKU</span>WALL</h1>
-        <button onClick={() => setShowSettings(true)} className="p-2 bg-white/5 rounded-full text-zinc-400 active:scale-90 transition"><Settings className="w-5 h-5"/></button>
+        <button 
+          onClick={() => { setSettingsView('main'); setShowSettings(true); }} 
+          className="p-2 bg-white/5 rounded-full text-zinc-400 active:scale-90 transition pointer-events-auto"
+        >
+          <Settings className="w-5 h-5"/>
+        </button>
       </header>
 
       {/* ⚪️ HERO SECTION */}
@@ -175,7 +177,6 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        {/* Stats Grid */}
         <div className="w-full max-w-sm mt-8 p-6 bg-zinc-900/30 border border-white/5 rounded-[32px] flex justify-between items-center backdrop-blur-sm shadow-xl">
            <StatItem label="Followers" value={stats.followers} />
            <div className="w-px h-8 bg-white/10" />
@@ -184,8 +185,7 @@ export default function ProfilePage() {
            <StatItem label="Likes" value={stats.likes} />
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2 w-full max-w-md mt-8">
+        <div className="flex gap-2 w-full max-w-md mt-8 px-2">
            <button onClick={() => setShowEdit(true)} className="flex-1 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition shadow-lg">Edit Profile</button>
            <button 
              onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/user/${user.uid}`); showToast("Profile Link Copied!"); }}
@@ -196,32 +196,27 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* 🔵 TABS */}
+      {/* 🔵 TABS & MEDIA GRID */}
       <div className="sticky top-[65px] bg-black z-30 flex border-b border-zinc-900 mt-8">
         <TabBtn active={activeTab === 'videos'} onClick={() => setActiveTab('videos')} icon={<Grid className="w-5 h-5" />} />
         <TabBtn active={activeTab === 'images'} onClick={() => setActiveTab('images')} icon={<ImageIcon className="w-5 h-5" />} />
         <TabBtn active={activeTab === 'likes'} onClick={() => setActiveTab('likes')} icon={<Heart className="w-5 h-5" />} />
       </div>
 
-      {/* 🎥 MEDIA GRID */}
       <div className="grid grid-cols-3 gap-[2px]">
-        {loading ? (
-          Array.from({length: 9}).map((_, i) => <div key={i} className="aspect-[3/4] bg-zinc-900 animate-pulse" />)
-        ) : (
-          uploads.filter(u => activeTab === 'videos' ? u.fileType === 'video' : u.fileType === 'image').map(item => (
-            <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="aspect-[3/4] bg-zinc-900 relative group overflow-hidden cursor-pointer">
-              {item.fileType === 'video' ? (
-                <video src={`${item.url}#t=0.1`} className="w-full h-full object-cover" muted playsInline />
-              ) : (
-                <img src={item.url} className="w-full h-full object-cover" alt="post" />
-              )}
-              <div className="absolute bottom-2 left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition duration-300">
+        {uploads.filter(u => activeTab === 'videos' ? u.fileType === 'video' : u.fileType === 'image').map(item => (
+          <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="aspect-[3/4] bg-zinc-900 relative group overflow-hidden cursor-pointer">
+            {item.fileType === 'video' ? (
+              <video src={`${item.url}#t=0.1`} className="w-full h-full object-cover" muted playsInline />
+            ) : (
+              <img src={item.url} className="w-full h-full object-cover" alt="post" />
+            )}
+            <div className="absolute bottom-2 left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition duration-300">
                  <Play className="w-3 h-3 fill-white" />
                  <span className="text-[10px] font-bold">{item.views || 0}</span>
-              </div>
             </div>
-          ))
-        )}
+          </div>
+        ))}
       </div>
 
       {/* 🟡 EDIT PROFILE MODAL */}
@@ -241,14 +236,8 @@ export default function ProfilePage() {
               </div>
               
               <div className="space-y-5">
-                <div>
-                  <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 block ml-1">Username</label>
-                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-black border border-white/5 p-4 rounded-2xl text-sm font-bold focus:border-red-600 outline-none transition" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 block ml-1">Bio</label>
-                  <textarea value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-black border border-white/5 p-4 rounded-2xl text-sm font-medium focus:border-red-600 outline-none transition h-24 resize-none" />
-                </div>
+                <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Username" className="w-full bg-black border border-white/5 p-4 rounded-2xl text-sm font-bold focus:border-red-600 outline-none transition" />
+                <textarea value={editBio} onChange={e => setEditBio(e.target.value)} placeholder="Bio" className="w-full bg-black border border-white/5 p-4 rounded-2xl text-sm font-medium focus:border-red-600 outline-none transition h-24 resize-none" />
               </div>
 
               <button onClick={saveProfile} className="w-full bg-red-600 py-4 rounded-2xl font-black text-sm mt-8 shadow-xl active:scale-95 transition uppercase tracking-widest">Save Changes</button>
@@ -256,7 +245,7 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* 🎭 DICEBEAR AVATAR PICKER (Drawer Style) */}
+      {/* 🎭 DICEBEAR AVATAR PICKER */}
       {showAvatarPicker && (
         <div className="fixed inset-0 z-[200]">
            <div className="drawer-mask" onClick={() => setShowAvatarPicker(false)} />
@@ -283,7 +272,7 @@ export default function ProfilePage() {
       )}
 
       {/* 🔴 SETTINGS SUB-VIEW ENGINE */}
-      <div className={`sub-view fixed inset-0 bg-black z-[100] transition-transform duration-500 flex flex-col ${showSettings ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`sub-view ${showSettings ? 'open' : ''}`}>
         <header className="p-6 border-b border-white/5 flex items-center gap-4 pt-safe bg-zinc-950 shadow-xl">
           <button 
             onClick={() => settingsView === 'main' ? setShowSettings(false) : setSettingsView('main')} 
@@ -292,15 +281,15 @@ export default function ProfilePage() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h2 className="font-black italic text-lg text-white uppercase tracking-tight">
-            {settingsView === 'main' ? 'Settings' : settingsView === 'account' ? 'Account' : settingsView === 'privacy' ? 'Privacy' : 'Terms'}
+            {settingsView}
           </h2>
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar pb-32">
           {settingsView === 'main' && (
-            <div className="space-y-8 animate-in slide-in-from-left-4 duration-300">
+            <div className="space-y-8">
                <SettingsGroup label="Personal">
-                  <SettingsItem icon={<User/>} label="Account Info" sub="Security, Password, Email" onClick={() => setSettingsView('account')} />
+                  <SettingsItem icon={<User/>} label="Account Info" onClick={() => setSettingsView('account')} />
                   <SettingsItem icon={<TrendingUp className="text-red-500"/>} label="Promote Content" onClick={() => router.push('/ads')} />
                </SettingsGroup>
 
@@ -311,7 +300,7 @@ export default function ProfilePage() {
 
                <SettingsGroup label="System">
                   <SettingsItem icon={<Trash2/>} label="Clear Cache" sub={cacheSize} onClick={() => { localStorage.clear(); setCacheSize("0 KB"); showToast("Cache Cleared!"); }} />
-                  <button onClick={() => signOut(auth).then(() => router.push('/auth'))} className="w-full p-5 mt-6 bg-red-600/10 text-red-500 rounded-3xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 border border-red-600/20 active:scale-95 transition">
+                  <button onClick={() => signOut(auth).then(() => router.push('/auth'))} className="w-full p-5 mt-6 bg-red-600/10 text-red-500 rounded-3xl font-black text-xs uppercase flex items-center justify-center gap-2 border border-red-600/20 active:scale-95 transition">
                     <LogOut className="w-4 h-4"/> Log Out
                   </button>
                </SettingsGroup>
@@ -319,29 +308,17 @@ export default function ProfilePage() {
           )}
 
           {settingsView === 'account' && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+            <div className="space-y-6 animate-in slide-in-from-right-4">
                <div className="p-6 bg-zinc-900/50 rounded-[32px] border border-white/5">
                   <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1">Registered Email</p>
                   <p className="font-bold text-white mb-6 flex items-center gap-2 truncate"><Mail className="w-4 h-4 text-zinc-500"/> {userData.email}</p>
-                  
-                  <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1">Security</p>
-                  <button 
-                    onClick={() => { sendPasswordResetEmail(auth, userData.email || ""); showToast("Reset link sent!"); }} 
-                    className="w-full p-4 bg-black border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest active:bg-zinc-800 transition"
-                  >
-                    Send Password Reset Link
-                  </button>
-               </div>
-               <div className="p-4 bg-red-900/10 border border-red-900/20 rounded-2xl flex items-start gap-3">
-                  <ShieldAlert className="text-red-500 w-5 h-5 shrink-0" />
-                  <p className="text-[11px] text-zinc-400 font-medium leading-relaxed">Deleting your account is permanent. All your syncs, likes, and followers will be removed forever.</p>
+                  <button onClick={() => { sendPasswordResetEmail(auth, userData.email || ""); showToast("Reset link sent!"); }} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest active:bg-zinc-800 transition">Send Reset Link</button>
                </div>
             </div>
           )}
           
-          {/* Terms/Privacy Views shortened for code length */}
-          {settingsView === 'privacy' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">OtakuWall uses end-to-end encryption for your private syncs. We never sell your data to third parties.</div>}
-          {settingsView === 'terms' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">By using OtakuWall, you agree not to upload NSFW content. Violation results in permanent ban.</div>}
+          {settingsView === 'privacy' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">OtakuWall uses end-to-end encryption for syncs. Your data is never sold.</div>}
+          {settingsView === 'terms' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">NSFW content is forbidden. Violation results in permanent ban.</div>}
         </div>
       </div>
 
@@ -372,7 +349,7 @@ function SettingsGroup({ label, children }: any) {
   return (
     <div>
       <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-[2px] mb-4 px-2">{label}</h3>
-      <div className="bg-zinc-900/50 rounded-[32px] border border-white/5 overflow-hidden shadow-2xl">{children}</div>
+      <div className="bg-zinc-900/50 rounded-[32px] border border-white/5 overflow-hidden">{children}</div>
     </div>
   );
 }
