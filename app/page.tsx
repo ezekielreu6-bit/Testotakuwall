@@ -8,7 +8,8 @@ import {
 } from "firebase/firestore";
 import { 
   Heart, MessageCircle, Share2, Volume2, VolumeX, 
-  Plus, X, Send, Link as LinkIcon, MoreHorizontal 
+  Plus, X, Send, Link as LinkIcon, MoreHorizontal,
+  Download, Flag, Zap, Check
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import Navbar from "@/components/Navbar";
@@ -22,7 +23,7 @@ interface VideoSlideProps {
   setMuted: (val: boolean) => void;
   isFollowing: boolean;
   onComment: () => void;
-  onShare: () => void; // Added for drawer
+  onShare: () => void;
 }
 
 export default function Feed() {
@@ -31,6 +32,7 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
   const [muted, setMuted] = useState(true);
   const [followingList, setFollowingList] = useState<string[]>([]);
+  const [friends, setFriends] = useState<UserData[]>([]);
   
   // Drawer States
   const [showComments, setShowComments] = useState(false);
@@ -40,7 +42,8 @@ export default function Feed() {
 
   // Share Drawer States
   const [showShare, setShowShare] = useState(false);
-  const [activeShareVid, setActiveShareVid] = useState<string | null>(null);
+  const [activeVid, setActiveVid] = useState<any>(null);
+  const [showSpeed, setShowSpeed] = useState(false);
 
   const shuffle = (array: any[]) => {
     const newArr = [...array];
@@ -67,15 +70,26 @@ export default function Feed() {
     };
 
     if (user) {
-      const unsub = onSnapshot(collection(db, `users/${user.uid}/following`), (snap) => {
+      // Fetch following for Follow buttons
+      onSnapshot(collection(db, `users/${user.uid}/following`), (snap) => {
         setFollowingList(snap.docs.map(d => d.id));
       });
-      fetchFeed();
-      return () => unsub();
-    } else { fetchFeed(); }
+      // Fetch friends for Share Drawer
+      const fetchFriends = async () => {
+        const q = query(collection(db, `users/${user.uid}/following`), limit(8));
+        const snap = await getDocs(q);
+        const fData = await Promise.all(snap.docs.map(async (f) => {
+          const d = await getDoc(doc(db, "users", f.id));
+          return d.data() as UserData;
+        }));
+        setFriends(fData);
+      };
+      fetchFriends();
+    }
+    fetchFeed();
   }, [user]);
 
-  // Comment logic
+  // Handle Comment Loading
   useEffect(() => {
     if (!commentVid) return;
     const q = query(collection(db, `wallpapers/${commentVid}/comments`), orderBy("createdAt", "desc"));
@@ -90,14 +104,21 @@ export default function Feed() {
     const text = commentInput;
     setCommentInput("");
     await addDoc(collection(db, `wallpapers/${commentVid}/comments`), {
-      text, userId: user.uid, username: userData?.username || "otaku", userPhoto: userData?.photoURL || "", createdAt: serverTimestamp()
+      text, userId: user.uid, username: userData?.username || "otaku", 
+      userPhoto: userData?.photoURL || "", createdAt: serverTimestamp()
     });
   };
 
-  const copyShareLink = () => {
-    if (!activeShareVid) return;
-    navigator.clipboard.writeText(`${window.location.origin}/watch/${activeShareVid}`);
-    alert("Link Copied!");
+  const handleDownload = async () => {
+    if (!activeVid) return;
+    alert("Downloading...");
+    const res = await fetch(activeVid.url);
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `OtakuWall_${activeVid.id}.mp4`;
+    a.click();
     setShowShare(false);
   };
 
@@ -115,41 +136,76 @@ export default function Feed() {
         ) : (
           videos.map((vid) => (
             <VideoSlide 
-              key={vid.id} 
-              video={vid} 
-              muted={muted} 
-              setMuted={setMuted} 
+              key={vid.id} video={vid} muted={muted} setMuted={setMuted} 
               isFollowing={followingList.includes(vid.userId)}
               onComment={() => { setCommentVid(vid.id); setShowComments(true); }}
-              onShare={() => { setActiveShareVid(vid.id); setShowShare(true); }}
+              onShare={() => { setActiveVid(vid); setShowShare(true); }}
             />
           ))
         )}
       </main>
 
-      {/* SHARE DRAWER - Higher Z-Index */}
+      {/* SHARE DRAWER - RESTORED ORIGINAL STYLE */}
       {showShare && (
         <div className="fixed inset-0 z-[300]">
-          <div className="drawer-mask" onClick={() => setShowShare(false)} />
-          <div className="drawer-content p-6 flex flex-col animate-in slide-in-from-bottom duration-300">
-            <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-6" />
-            <h3 className="text-center text-xs font-black uppercase tracking-widest text-zinc-500 mb-8">Share Sync</h3>
-            
-            <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 border-b border-white/5 mb-6">
-              <div className="flex flex-col items-center gap-2 min-w-[70px] cursor-pointer" onClick={copyShareLink}>
-                <div className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-white"><LinkIcon /></div>
-                <span className="text-[10px] font-black text-zinc-500 uppercase">Link</span>
+          <div className="drawer-mask" onClick={() => { setShowShare(false); setShowSpeed(false); }} />
+          <div className="drawer-content flex flex-col animate-in slide-in-from-bottom duration-300">
+            <div className="p-4 border-b border-white/5 text-center relative">
+              <h3 className="font-bold text-gray-200 text-sm uppercase tracking-widest">Share Sync</h3>
+              <button onClick={() => setShowShare(false)} className="absolute right-4 top-4 text-zinc-500"><X className="w-5 h-5"/></button>
+            </div>
+
+            {/* Friends Scroll */}
+            <div className="flex gap-4 overflow-x-auto p-4 border-b border-white/5 no-scrollbar">
+              {friends.map((f, i) => (
+                <div key={i} className="flex flex-col items-center min-w-[65px] gap-1 cursor-pointer active:scale-90 transition">
+                  <img src={f.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${f.uid}`} className="w-12 h-12 rounded-full object-cover border border-white/10" />
+                  <span className="text-[9px] font-bold text-zinc-500 truncate w-14 text-center">@{f.username}</span>
+                </div>
+              ))}
+              {friends.length === 0 && <p className="text-[10px] text-zinc-600 font-bold p-4 uppercase tracking-tighter">Follow people to share directly</p>}
+            </div>
+
+            {/* Circular Apps Row */}
+            <div className="flex gap-6 overflow-x-auto p-6 border-b border-white/5 no-scrollbar">
+              <div className="flex flex-col items-center gap-2 min-w-[65px]" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid?.id}`); alert("Link Copied!"); }}>
+                <div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center"><LinkIcon className="w-5 h-5"/></div>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase">Link</span>
               </div>
-              <div className="flex flex-col items-center gap-2 min-w-[70px] cursor-pointer" onClick={() => window.open(`https://wa.me/?text=Check this out! ${window.location.origin}/watch/${activeShareVid}`)}>
-                <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center text-white"><Send className="fill-white w-5 h-5" /></div>
-                <span className="text-[10px] font-black text-zinc-500 uppercase">WhatsApp</span>
+              <div className="flex flex-col items-center gap-2 min-w-[65px]" onClick={() => window.open(`https://wa.me/?text=Check this! ${window.location.origin}/watch/${activeVid?.id}`)}>
+                <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center"><Send className="w-5 h-5 fill-white"/></div>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase">WA</span>
               </div>
-              <div className="flex flex-col items-center gap-2 min-w-[70px] cursor-pointer">
-                <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center text-white"><MoreHorizontal /></div>
-                <span className="text-[10px] font-black text-zinc-500 uppercase">More</span>
+              <div className="flex flex-col items-center gap-2 min-w-[65px]">
+                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center"><MoreHorizontal className="w-5 h-5"/></div>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase">More</span>
               </div>
             </div>
-            <button onClick={() => setShowShare(false)} className="w-full py-4 bg-zinc-900 rounded-2xl font-bold text-zinc-400">Cancel</button>
+
+            {/* Action Grid */}
+            <div className="p-6 grid grid-cols-3 gap-4 text-center">
+              <button onClick={() => setShowSpeed(!showSpeed)} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 bg-zinc-800 rounded-2xl flex items-center justify-center"><Zap className="w-6 h-6 text-yellow-500"/></div>
+                <span className="text-[11px] font-bold text-zinc-400">Speed</span>
+              </button>
+              <button onClick={handleDownload} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 bg-zinc-800 rounded-2xl flex items-center justify-center"><Download className="w-6 h-6 text-green-500"/></div>
+                <span className="text-[11px] font-bold text-zinc-400">Save</span>
+              </button>
+              <button onClick={() => alert("Report logic here")} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 bg-red-900/20 rounded-2xl flex items-center justify-center"><Flag className="w-6 h-6 text-red-500"/></div>
+                <span className="text-[11px] font-bold text-zinc-400">Report</span>
+              </button>
+            </div>
+
+            {/* Speed Selector Row */}
+            {showSpeed && (
+              <div className="p-4 bg-black border-t border-white/5 flex gap-3 justify-center animate-in fade-in">
+                {[0.5, 1.0, 1.5, 2.0].map(s => (
+                  <button key={s} className="px-4 py-2 bg-zinc-800 rounded-full text-xs font-bold active:bg-red-600 transition">{s}x</button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -199,14 +255,14 @@ function VideoSlide({ video, muted, setMuted, isFollowing, onComment, onShare }:
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) videoRef.current?.play().catch(() => {});
-      else { videoRef.current?.pause(); if (videoRef.current) videoRef.current.currentTime = 0; }
+      else { videoRef.current?.pause(); if(videoRef.current) videoRef.current.currentTime = 0; }
     }, { threshold: 0.7 });
     if (videoRef.current) observer.observe(videoRef.current);
     return () => observer.disconnect();
   }, []);
 
   const toggleLike = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Stop video pause
+    e.stopPropagation();
     if (!user) return;
     const ref = doc(db, "wallpapers", video.id);
     if (liked) {
@@ -219,7 +275,7 @@ function VideoSlide({ video, muted, setMuted, isFollowing, onComment, onShare }:
   };
 
   const handleFollow = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Stop video pause
+    e.stopPropagation();
     if (!user || isFollowing) return;
     await setDoc(doc(db, `users/${video.userId}/followers`, user.uid), { uid: user.uid });
     await setDoc(doc(db, `users/${user.uid}/following`, video.userId), { uid: video.userId });
@@ -232,7 +288,7 @@ function VideoSlide({ video, muted, setMuted, isFollowing, onComment, onShare }:
       <div className="absolute right-4 bottom-32 flex flex-col gap-6 items-center z-40 pointer-events-auto">
         <div className="relative mb-2">
           <Link href={`/user/${video.userId}`} onClick={(e) => e.stopPropagation()}>
-            <img src={video.creator?.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${video.userId}`} className="w-12 h-12 rounded-full border-2 border-white object-cover" alt="avatar" />
+            <img src={video.creator?.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${video.userId}`} className="w-12 h-12 rounded-full border-2 border-white object-cover shadow-xl" />
           </Link>
           {!isFollowing && user?.uid !== video.userId && (
             <button onClick={handleFollow} className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black active:scale-125 transition"><Plus className="w-3 h-3 text-white" /></button>
