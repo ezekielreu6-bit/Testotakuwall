@@ -43,17 +43,19 @@ export interface Chat {
   unread?: Record<string, number>;
 }
 
+// types/index.ts
+
 export interface Message {
   id: string;
   text?: string;
-  type?: 'text' | 'video' | 'poll';
+  // Added 'sticker' here to allow the comparison
+  type?: 'text' | 'video' | 'poll' | 'sticker'; 
   senderId: string;
   timestamp: any;
   reaction?: string;
   mediaUrl?: string;
   options?: { text: string; votes: string[] }[];
 }
-
 export interface Report {
   id: string;
   contentId: string;
