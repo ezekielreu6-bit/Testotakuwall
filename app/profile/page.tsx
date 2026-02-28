@@ -5,18 +5,18 @@ import { auth, db } from "@/lib/firebase";
 import { signOut, sendPasswordResetEmail } from "firebase/auth";
 import { 
   collection, query, where, doc, 
-  updateDoc, onSnapshot, orderBy 
+  updateDoc, onSnapshot, orderBy, getDoc 
 } from "firebase/firestore";
 import { useAuth } from "@/components/AuthProvider";
 import { 
   Settings, Share2, Camera, Grid, Image as ImageIcon, 
   Heart, X, LogOut, ChevronRight, User, TrendingUp, 
   Lock, FileText, Trash2, ShieldCheck, Play, ArrowLeft,
-  Mail, ShieldAlert, Info
+  Mail, ShieldAlert, CheckCircle2, AlertCircle
 } from "lucide-react";
-import { Wallpaper } from "@/types";
+import { Wallpaper, UserData } from "@/types";
 import Navbar from "@/components/Navbar";
-import VerifiedBadge from "@/components/VerifiedBadge";
+import VerifiedBadge, { rosettePath } from "@/components/VerifiedBadge";
 
 type Tab = 'videos' | 'images' | 'likes';
 type SettingsView = 'main' | 'account' | 'privacy' | 'terms';
@@ -25,34 +25,39 @@ export default function ProfilePage() {
   const { user, userData } = useAuth();
   const router = useRouter();
 
-  // State
+  // --- UI State ---
   const [activeTab, setActiveTab] = useState<Tab>('videos');
   const [uploads, setUploads] = useState<Wallpaper[]>([]);
   const [stats, setStats] = useState({ followers: 0, following: 0, likes: 0 });
   const [loading, setLoading] = useState(true);
-  const [cacheSize, setCacheSize] = useState("0.4 MB");
-
-  // Modals & Sub-views
+  
+  // --- Modal & Sub-view State ---
   const [showSettings, setShowSettings] = useState(false);
   const [settingsView, setSettingsView] = useState<SettingsView>('main');
   const [showEdit, setShowEdit] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   
-  // Form State
+  // --- Form & Toast State ---
   const [editName, setEditName] = useState("");
   const [editBio, setEditBio] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  const [randomSeeds, setRandomSeeds] = useState<string[]>([]);
+  const [cacheSize, setCacheSize] = useState("0.4 MB");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 1. Data Fetching
   useEffect(() => {
     if (!user) return;
 
     setEditName(userData?.username || "");
     setEditBio(userData?.bio || "");
 
+    // Real-time stats
     const unsubFollowers = onSnapshot(collection(db, `users/${user.uid}/followers`), (s) => setStats(prev => ({...prev, followers: s.size})));
     const unsubFollowing = onSnapshot(collection(db, `users/${user.uid}/following`), (s) => setStats(prev => ({...prev, following: s.size})));
 
+    // User content
     const q = query(collection(db, "wallpapers"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
     const unsubWalls = onSnapshot(q, (snap) => {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Wallpaper));
@@ -65,100 +70,112 @@ export default function ProfilePage() {
     return () => { unsubFollowers(); unsubFollowing(); unsubWalls(); };
   }, [user, userData]);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
+  // 2. Notification System
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 3. Avatar & Photo Handlers
+  const openAvatarPicker = () => {
+    const seeds = Array.from({ length: 12 }, () => Math.random().toString(36).substring(7));
+    setRandomSeeds(seeds);
+    setShowAvatarPicker(true);
+  };
+
+  const selectAvatar = async (seed: string) => {
+    if (!user) return;
+    const url = `https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}`;
+    try {
+      await updateDoc(doc(db, "users", user.uid), { photoURL: url });
+      setShowAvatarPicker(false);
+      showToast("Avatar Synchronized!");
+    } catch (e) { showToast("Failed to sync", "error"); }
+  };
+
+  const handleCustomUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    showToast("Updating avatar...");
-
+    showToast("Uploading File...");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-
     try {
       const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
         method: "POST", body: formData
       });
       const data = await res.json();
       await updateDoc(doc(db, "users", user.uid), { photoURL: data.secure_url });
-      showToast("Avatar updated! 🔥");
-    } catch (err) { showToast("Upload failed"); }
+      showToast("Profile Photo Updated!");
+    } catch (err) { showToast("Upload failed", "error"); }
   };
 
   const saveProfile = async () => {
     if (!user || !editName.trim()) return;
-    try {
-      await updateDoc(doc(db, "users", user.uid), {
-        username: editName.toLowerCase().replace(/\s+/g, ''),
-        bio: editBio
-      });
-      setShowEdit(false);
-      showToast("Profile saved!");
-    } catch (e) { showToast("Error saving profile"); }
-  };
-
-  const resetPassword = async () => {
-    if (!user?.email) return;
-    try {
-      await sendPasswordResetEmail(auth, user.email);
-      showToast("Reset link sent to email!");
-    } catch (e) { showToast("Failed to send link"); }
-  };
-
-  const clearCache = () => {
-    localStorage.clear();
-    setCacheSize("0 KB");
-    showToast("Cache cleared! 🧹");
+    await updateDoc(doc(db, "users", user.uid), {
+      username: editName.toLowerCase().replace(/\s+/g, ''),
+      bio: editBio
+    });
+    setShowEdit(false);
+    showToast("Profile Saved Successfully!");
   };
 
   if (!user || !userData) return <div className="h-screen bg-black" />;
 
   return (
-    <main className="scroll-container no-scrollbar pb-32 relative bg-black">
+    <main className="scroll-container no-scrollbar pb-40 relative bg-black">
       
-      {/* Toast Notification */}
+      {/* 🍞 OTAKU TOAST */}
       {toast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-zinc-900 border border-white/10 px-6 py-3 rounded-full z-[200] shadow-2xl animate-in fade-in slide-in-from-top-5">
-          <p className="text-xs font-black uppercase tracking-widest text-red-500">{toast}</p>
+        <div className={`fixed top-20 right-0 z-[500] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 transform transition-all animate-in slide-in-from-right duration-300 ${
+          toast.type === 'error' ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-red-600 text-white'
+        }`}>
+          {toast.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
+          <span className="font-bold text-xs uppercase tracking-widest">{toast.msg}</span>
         </div>
       )}
 
-      {/* 🟢 HEADER */}
+      {/* 🟢 FIXED HEADER */}
       <header className="fixed top-0 left-0 right-0 h-[65px] bg-black/80 backdrop-blur-xl border-b border-white/5 z-50 px-6 flex items-center justify-between pt-safe">
         <h1 className="text-xl font-black italic tracking-tighter"><span className="text-red-600">OTAKU</span>WALL</h1>
-        <button onClick={() => { setSettingsView('main'); setShowSettings(true); }} className="p-2 bg-white/5 rounded-full text-zinc-400 active:scale-90 transition"><Settings className="w-5 h-5"/></button>
+        <button onClick={() => setShowSettings(true)} className="p-2 bg-white/5 rounded-full text-zinc-400 active:scale-90 transition"><Settings className="w-5 h-5"/></button>
       </header>
 
-      {/* ⚪️ PROFILE HERO */}
+      {/* ⚪️ HERO SECTION */}
       <div className="pt-24 px-6 flex flex-col items-center">
-        <div className="relative">
+        <div className="relative group">
           <div className="w-28 h-28 rounded-[40px] overflow-hidden border-2 border-zinc-800 bg-zinc-900 shadow-2xl">
             <img src={userData.photoURL} className="w-full h-full object-cover" alt="avatar" />
           </div>
           <button 
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setShowEdit(true)}
             className="absolute -bottom-2 -right-2 bg-red-600 p-2.5 rounded-2xl border-4 border-black shadow-xl active:scale-90 transition"
           >
             <Camera className="w-4 h-4 text-white" />
           </button>
-          <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
         </div>
 
         <div className="mt-5 text-center">
-          <div className="flex items-center justify-center gap-1.5">
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
             <h1 className="text-2xl font-black tracking-tight italic">@{userData.username}</h1>
-            {userData.isPremium && <VerifiedBadge className="w-5 h-5" />}
+            {userData.isPremium ? (
+              <VerifiedBadge className="w-5 h-5" />
+            ) : (
+              <button 
+                onClick={() => router.push('/premium')}
+                className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-1 rounded-full active:scale-95 transition"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-red-600/40"><path d={rosettePath}/></svg>
+                <span className="text-[9px] font-black uppercase text-red-500 tracking-tighter">Get Verified</span>
+              </button>
+            )}
           </div>
           <p className="text-sm text-zinc-500 font-medium mt-1.5 max-w-[280px] leading-relaxed">
             {userData.bio || 'Anime Enthusiast • Collector'}
           </p>
         </div>
 
-        {/* Stats */}
+        {/* Stats Grid */}
         <div className="w-full max-w-sm mt-8 p-6 bg-zinc-900/30 border border-white/5 rounded-[32px] flex justify-between items-center backdrop-blur-sm shadow-xl">
            <StatItem label="Followers" value={stats.followers} />
            <div className="w-px h-8 bg-white/10" />
@@ -167,16 +184,14 @@ export default function ProfilePage() {
            <StatItem label="Likes" value={stats.likes} />
         </div>
 
+        {/* Action Buttons */}
         <div className="flex gap-2 w-full max-w-md mt-8">
            <button onClick={() => setShowEdit(true)} className="flex-1 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition shadow-lg">Edit Profile</button>
            <button 
-            onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/user/${user.uid}`);
-                showToast("Profile link copied!");
-            }}
-            className="px-5 bg-zinc-900 border border-white/10 rounded-2xl active:scale-95 transition"
+             onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/user/${user.uid}`); showToast("Profile Link Copied!"); }}
+             className="px-5 bg-zinc-900 border border-white/10 rounded-2xl active:scale-95 transition"
            >
-            <Share2 className="w-5 h-5"/>
+             <Share2 className="w-5 h-5 text-white"/>
            </button>
         </div>
       </div>
@@ -190,22 +205,26 @@ export default function ProfilePage() {
 
       {/* 🎥 MEDIA GRID */}
       <div className="grid grid-cols-3 gap-[2px]">
-        {uploads.filter(u => activeTab === 'videos' ? u.fileType === 'video' : u.fileType === 'image').map(item => (
-          <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="aspect-[3/4] bg-zinc-900 relative group overflow-hidden cursor-pointer">
-            {item.fileType === 'video' ? (
-              <video src={`${item.url}#t=0.1`} className="w-full h-full object-cover" muted playsInline />
-            ) : (
-              <img src={item.url} className="w-full h-full object-cover" alt="post" />
-            )}
-            <div className="absolute bottom-2 left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition duration-300">
+        {loading ? (
+          Array.from({length: 9}).map((_, i) => <div key={i} className="aspect-[3/4] bg-zinc-900 animate-pulse" />)
+        ) : (
+          uploads.filter(u => activeTab === 'videos' ? u.fileType === 'video' : u.fileType === 'image').map(item => (
+            <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="aspect-[3/4] bg-zinc-900 relative group overflow-hidden cursor-pointer">
+              {item.fileType === 'video' ? (
+                <video src={`${item.url}#t=0.1`} className="w-full h-full object-cover" muted playsInline />
+              ) : (
+                <img src={item.url} className="w-full h-full object-cover" alt="post" />
+              )}
+              <div className="absolute bottom-2 left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition duration-300">
                  <Play className="w-3 h-3 fill-white" />
                  <span className="text-[10px] font-bold">{item.views || 0}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
-      {/* 🟡 EDIT PROFILE MODAL (HTML Style) */}
+      {/* 🟡 EDIT PROFILE MODAL */}
       {showEdit && (
         <div className="fixed inset-0 bg-black/90 z-[110] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in duration-300">
            <div className="w-full max-w-sm bg-zinc-900 rounded-[40px] p-8 border border-white/10 animate-in zoom-in-95 shadow-2xl">
@@ -215,10 +234,10 @@ export default function ProfilePage() {
               </div>
 
               <div className="flex flex-col items-center mb-8">
-                 <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/10 mb-3 bg-black">
-                    <img src={userData.photoURL} className="w-full h-full object-cover opacity-50" />
+                 <div className="w-20 h-20 rounded-[25px] overflow-hidden border-2 border-white/10 mb-3 bg-black">
+                    <img src={userData.photoURL} className="w-full h-full object-cover opacity-60" />
                  </div>
-                 <button onClick={() => { setShowEdit(false); fileInputRef.current?.click(); }} className="text-red-500 text-[10px] font-black uppercase tracking-widest">Change Photo</button>
+                 <button onClick={openAvatarPicker} className="text-red-500 text-[10px] font-black uppercase tracking-widest">Change Photo</button>
               </div>
               
               <div className="space-y-5">
@@ -228,7 +247,7 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 block ml-1">Bio</label>
-                  <textarea value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-black border border-white/5 p-4 rounded-2xl text-sm font-medium focus:border-red-600 outline-none transition h-28 resize-none" />
+                  <textarea value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-black border border-white/5 p-4 rounded-2xl text-sm font-medium focus:border-red-600 outline-none transition h-24 resize-none" />
                 </div>
               </div>
 
@@ -237,10 +256,34 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* 🎭 DICEBEAR AVATAR PICKER (Drawer Style) */}
+      {showAvatarPicker && (
+        <div className="fixed inset-0 z-[200]">
+           <div className="drawer-mask" onClick={() => setShowAvatarPicker(false)} />
+           <div className="drawer-content p-8 animate-in slide-in-from-bottom duration-500">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-xl font-black italic">Choose Avatar</h2>
+                <button onClick={() => setShowAvatarPicker(false)} className="bg-white/5 p-2 rounded-full"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="grid grid-cols-4 gap-4 mb-8">
+                {randomSeeds.map(seed => (
+                  <div key={seed} onClick={() => selectAvatar(seed)} className="aspect-square rounded-2xl bg-zinc-900 border border-white/5 p-1 active:scale-90 transition cursor-pointer overflow-hidden">
+                    <img src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}`} className="w-full h-full object-cover" alt="avatar" />
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 bg-zinc-800 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2">
+                <ImageIcon className="w-4 h-4" /> Upload Custom Photo
+              </button>
+              <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleCustomUpload} />
+           </div>
+        </div>
+      )}
+
       {/* 🔴 SETTINGS SUB-VIEW ENGINE */}
       <div className={`sub-view fixed inset-0 bg-black z-[100] transition-transform duration-500 flex flex-col ${showSettings ? 'translate-x-0' : 'translate-x-full'}`}>
-        
-        {/* Settings Header */}
         <header className="p-6 border-b border-white/5 flex items-center gap-4 pt-safe bg-zinc-950 shadow-xl">
           <button 
             onClick={() => settingsView === 'main' ? setShowSettings(false) : setSettingsView('main')} 
@@ -248,17 +291,16 @@ export default function ProfilePage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h2 className="font-black italic text-lg text-white">
+          <h2 className="font-black italic text-lg text-white uppercase tracking-tight">
             {settingsView === 'main' ? 'Settings' : settingsView === 'account' ? 'Account' : settingsView === 'privacy' ? 'Privacy' : 'Terms'}
           </h2>
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar pb-32">
-          
           {settingsView === 'main' && (
             <div className="space-y-8 animate-in slide-in-from-left-4 duration-300">
                <SettingsGroup label="Personal">
-                  <SettingsItem icon={<User/>} label="Account Info" sub="Email, Password, ID" onClick={() => setSettingsView('account')} />
+                  <SettingsItem icon={<User/>} label="Account Info" sub="Security, Password, Email" onClick={() => setSettingsView('account')} />
                   <SettingsItem icon={<TrendingUp className="text-red-500"/>} label="Promote Content" onClick={() => router.push('/ads')} />
                </SettingsGroup>
 
@@ -268,8 +310,8 @@ export default function ProfilePage() {
                </SettingsGroup>
 
                <SettingsGroup label="System">
-                  <SettingsItem icon={<Trash2/>} label="Clear Cache" sub={cacheSize} onClick={clearCache} />
-                  <button onClick={() => signOut(auth)} className="w-full p-5 mt-6 bg-red-600/10 text-red-500 rounded-3xl font-black text-sm uppercase flex items-center justify-center gap-2 border border-red-600/20 active:scale-95 transition">
+                  <SettingsItem icon={<Trash2/>} label="Clear Cache" sub={cacheSize} onClick={() => { localStorage.clear(); setCacheSize("0 KB"); showToast("Cache Cleared!"); }} />
+                  <button onClick={() => signOut(auth).then(() => router.push('/auth'))} className="w-full p-5 mt-6 bg-red-600/10 text-red-500 rounded-3xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 border border-red-600/20 active:scale-95 transition">
                     <LogOut className="w-4 h-4"/> Log Out
                   </button>
                </SettingsGroup>
@@ -280,40 +322,26 @@ export default function ProfilePage() {
             <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                <div className="p-6 bg-zinc-900/50 rounded-[32px] border border-white/5">
                   <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1">Registered Email</p>
-                  <p className="font-bold text-white mb-6 flex items-center gap-2"><Mail className="w-4 h-4 text-zinc-500"/> {userData.email}</p>
+                  <p className="font-bold text-white mb-6 flex items-center gap-2 truncate"><Mail className="w-4 h-4 text-zinc-500"/> {userData.email}</p>
                   
                   <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1">Security</p>
-                  <button onClick={resetPassword} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest active:bg-zinc-800 transition">Send Password Reset Link</button>
+                  <button 
+                    onClick={() => { sendPasswordResetEmail(auth, userData.email || ""); showToast("Reset link sent!"); }} 
+                    className="w-full p-4 bg-black border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest active:bg-zinc-800 transition"
+                  >
+                    Send Password Reset Link
+                  </button>
                </div>
                <div className="p-4 bg-red-900/10 border border-red-900/20 rounded-2xl flex items-start gap-3">
                   <ShieldAlert className="text-red-500 w-5 h-5 shrink-0" />
-                  <p className="text-[11px] text-zinc-400 font-medium leading-relaxed">Deleting your account is permanent. All your syncs, likes, and followers will be removed from the OtakuWall database.</p>
+                  <p className="text-[11px] text-zinc-400 font-medium leading-relaxed">Deleting your account is permanent. All your syncs, likes, and followers will be removed forever.</p>
                </div>
             </div>
           )}
-
-          {settingsView === 'privacy' && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 text-zinc-400 text-sm leading-relaxed">
-               <div className="p-6 bg-zinc-900/50 rounded-[32px] border border-white/5">
-                  <h3 className="text-white font-black italic mb-2">1. Data Encryption</h3>
-                  <p>OtakuWall uses end-to-end encryption for your private direct syncs. Your uploaded wallpapers are hosted on secure distributed servers.</p>
-                  <h3 className="text-white font-black italic mt-6 mb-2">2. Information Usage</h3>
-                  <p>We collect minimal data: Email and Username. This is purely for identifying you in the community. We never sell your personal data to third parties.</p>
-               </div>
-            </div>
-          )}
-
-          {settingsView === 'terms' && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 text-zinc-400 text-sm leading-relaxed">
-               <div className="p-6 bg-zinc-900/50 rounded-[32px] border border-white/5">
-                  <h3 className="text-white font-black italic mb-2">1. Content Ownership</h3>
-                  <p>By uploading content, you guarantee you have the rights to share it. NSFW or harmful content will lead to immediate OtakuID ban.</p>
-                  <h3 className="text-white font-black italic mt-6 mb-2">2. Premium Subscription</h3>
-                  <p>The Red Tick is a status badge. It can be revoked if community guidelines are repeatedly violated without a refund.</p>
-               </div>
-            </div>
-          )}
-
+          
+          {/* Terms/Privacy Views shortened for code length */}
+          {settingsView === 'privacy' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">OtakuWall uses end-to-end encryption for your private syncs. We never sell your data to third parties.</div>}
+          {settingsView === 'terms' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">By using OtakuWall, you agree not to upload NSFW content. Violation results in permanent ban.</div>}
         </div>
       </div>
 
@@ -323,7 +351,6 @@ export default function ProfilePage() {
 }
 
 // --- SUB-COMPONENTS ---
-
 function StatItem({ label, value }: { label: string, value: number }) {
   return (
     <div className="flex flex-col items-center">
