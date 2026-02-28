@@ -117,7 +117,7 @@ export default function CategoryGallery() {
         timestamp: serverTimestamp(),
         status: 'pending'
       });
-      triggerToast("Report Sent to Admin! ✅");
+      triggerToast("Report Sent ✅");
       setShowReport(false);
       setShowDrawer(false);
     } catch (e) {
@@ -126,7 +126,7 @@ export default function CategoryGallery() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white pb-32">
+    <main className="scroll-container no-scrollbar pb-32">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-20 right-0 p-4 rounded-l-lg shadow-2xl z-[200] font-bold text-sm border-l-4 transition-transform ${toast.err ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-red-500 text-white'}`}>
