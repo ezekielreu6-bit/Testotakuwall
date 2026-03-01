@@ -17,28 +17,46 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import Link from "next/link";
 import { Wallpaper, UserData } from "@/types";
 
+// --- Types ---
+interface CommentData {
+  id: string;
+  text: string;
+  userId: string;
+  username: string;
+  userPhoto?: string;
+  createdAt: any;
+  parentId?: string | null;
+}
+
+interface VideoSlideProps {
+  video: Wallpaper & { creator?: UserData };
+  muted: boolean;
+  setMuted: (val: boolean) => void;
+  onShare: () => void;
+  onComment: () => void;
+}
+
 export default function Feed() {
   const { user, userData } = useAuth();
   const [videos, setVideos] = useState<(Wallpaper & { creator?: UserData })[]>([]);
   const [loading, setLoading] = useState(true);
   const [muted, setMuted] = useState(true);
-  const [playbackRate, setPlaybackRate] = useState(1.0);
 
-  // --- UI MODAL STATES ---
+  // --- UI States ---
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [activeVid, setActiveVid] = useState<any>(null);
 
-  // --- SEARCH STATES ---
+  // --- Search ---
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<{ users: UserData[], videos: Wallpaper[] }>({ users: [], videos: [] });
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- COMMENT STATES ---
-  const [comments, setComments] = useState<any[]>([]);
+  // --- Comments ---
+  const [comments, setComments] = useState<CommentData[]>([]);
   const [commentInput, setCommentInput] = useState("");
   const [replyTo, setReplyTo] = useState<{ id: string; username: string; path: string } | null>(null);
 
@@ -47,7 +65,6 @@ export default function Feed() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 1. Fetch Feed & Shuffle
   useEffect(() => {
     const fetchFeed = async () => {
       try {
@@ -65,7 +82,6 @@ export default function Feed() {
     fetchFeed();
   }, []);
 
-  // 2. Search Engine Logic
   useEffect(() => {
     if (searchQuery.length < 2) { setSuggestions([]); return; }
     const delay = setTimeout(async () => {
@@ -80,15 +96,17 @@ export default function Feed() {
     setIsSearching(true); setSearchQuery(qStr); setSuggestions([]);
     const uSnap = await getDocs(query(collection(db, "users"), where("username", "==", qStr.toLowerCase().trim())));
     const vSnap = await getDocs(query(collection(db, "wallpapers"), where("fileType", "==", "video"), orderBy("title"), startAt(qStr), endAt(qStr + "\uf8ff"), limit(12)));
-    setSearchResults({ users: uSnap.docs.map(d => ({ ...d.data(), uid: d.id } as UserData)), videos: vSnap.docs.map(d => ({ ...d.data(), id: d.id } as Wallpaper)) });
+    setSearchResults({ 
+      users: uSnap.docs.map(d => ({ ...d.data(), uid: d.id } as UserData)), 
+      videos: vSnap.docs.map(d => ({ ...d.data(), id: d.id } as Wallpaper)) 
+    });
     setIsSearching(false);
   };
 
-  // 3. Comments Logic (Recursive)
   useEffect(() => {
     if (!activeVid || !showComments) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${activeVid.id}/comments`), orderBy("createdAt", "asc")), (snap) => {
-      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() } as CommentData)));
     });
     return () => unsub();
   }, [activeVid, showComments]);
@@ -96,11 +114,7 @@ export default function Feed() {
   const submitComment = async () => {
     if (!user || !commentInput.trim() || !activeVid) return;
     const text = commentInput; setCommentInput("");
-    
-    // If replyTo exists, we save to the 'replies' subcollection of that comment
-    const colPath = replyTo 
-      ? `wallpapers/${activeVid.id}/comments/${replyTo.id}/replies`
-      : `wallpapers/${activeVid.id}/comments`;
+    const colPath = replyTo ? `${replyTo.path}` : `wallpapers/${activeVid.id}/comments`;
 
     await addDoc(collection(db, colPath), {
       text,
@@ -116,18 +130,13 @@ export default function Feed() {
 
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden">
-      
-      {/* 🍞 TOAST */}
       {toast && (
-        <div className={`fixed top-24 right-0 z-[600] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 transform transition-all animate-in slide-in-from-right duration-300 ${
-          toast.type === 'error' ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-red-600 text-white'
-        }`}>
+        <div className="fixed top-24 right-0 z-[600] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 bg-zinc-900 border-red-600 text-white animate-in slide-in-from-right duration-300">
           <AlertCircle className="w-5 h-5"/>
           <span className="font-bold text-xs uppercase tracking-widest">{toast.msg}</span>
         </div>
       )}
 
-      {/* HEADER */}
       <header className="absolute top-0 left-0 right-0 p-6 z-50 flex justify-between items-center pt-safe pointer-events-none">
         <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto">
           <span className="text-red-600">OTAKU</span>WALL
@@ -135,7 +144,6 @@ export default function Feed() {
         <button onClick={() => setShowSearch(true)} className="p-3 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full text-white pointer-events-auto active:scale-90 transition"><Search/></button>
       </header>
 
-      {/* MAIN FEED */}
       <main className="feed-container no-scrollbar">
         {loading ? (
           <div className="h-full w-full flex items-center justify-center bg-black"><div className="otaku-spinner"></div></div>
@@ -145,26 +153,23 @@ export default function Feed() {
               key={vid.id} video={vid} muted={muted} setMuted={setMuted} 
               onShare={() => { setActiveVid(vid); setShowShare(true); }} 
               onComment={() => { setActiveVid(vid); setShowComments(true); }}
-              playbackRate={playbackRate}
             />
           ))
         )}
       </main>
 
-      {/* 🔍 SEARCH MODAL */}
       <div className={`fixed inset-0 z-[500] transition-transform duration-500 bg-black ${showSearch ? 'translate-x-0' : 'translate-x-full'}`}>
         <header className="p-6 pt-safe border-b border-white/5 flex items-center gap-4">
            <button onClick={() => setShowSearch(false)} className="p-2 bg-zinc-900 rounded-full"><X/></button>
            <div className="flex-1 relative">
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search Otakus or Syncs..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all" />
+              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all" />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
            </div>
         </header>
         <div className="flex-1 overflow-y-auto p-6 no-scrollbar pb-20">
             {suggestions.map((s, i) => (
-              <button key={i} onClick={() => executeSearch(s)} className="w-full flex items-center justify-between p-4 bg-zinc-900/50 rounded-2xl mb-2 border border-white/5"><span className="font-bold text-sm">@{s}</span><ArrowRight className="w-4 h-4 text-red-600"/></button>
+              <button key={i} onClick={() => executeSearch(s)} className="w-full flex items-center justify-between p-4 bg-zinc-900/50 rounded-2xl mb-2 border border-white/5 font-bold">@{s}<ArrowRight className="text-red-600"/></button>
             ))}
-            {/* Search Results Grid (Users & Videos) */}
             <div className="grid grid-cols-2 gap-3 mt-4">
                {searchResults.videos.map(v => (
                  <Link key={v.id} href={`/watch/${v.id}`} className="aspect-[9/16] rounded-2xl bg-zinc-900 overflow-hidden relative border border-white/5"><video src={`${v.url}#t=0.1`} className="w-full h-full object-cover opacity-60" muted playsInline /><div className="absolute bottom-0 p-3"><p className="text-[10px] font-bold truncate">{v.title}</p></div></Link>
@@ -173,13 +178,12 @@ export default function Feed() {
         </div>
       </div>
 
-      {/* 💬 COMMENTS DRAWER WITH NESTED REPLIES */}
       {showComments && (
         <div className="fixed inset-0 z-[500]">
           <div className="drawer-mask" onClick={() => { setShowComments(false); setReplyTo(null); }} />
           <div className="drawer-content flex flex-col h-[75vh] animate-in slide-in-from-bottom duration-300">
             <header className="p-4 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
-              <span className="text-xs font-black uppercase text-zinc-500 tracking-widest">Discussion Hub</span>
+              <span className="text-xs font-black uppercase text-zinc-500">Discussion Hub</span>
               <button onClick={() => setShowComments(false)} className="p-2 bg-white/5 rounded-full"><X className="w-4 h-4"/></button>
             </header>
 
@@ -189,42 +193,32 @@ export default function Feed() {
                    key={c.id} 
                    comment={c} 
                    vidId={activeVid.id} 
-                   onReply={(id, user) => setReplyTo({ id, username: user, path: `wallpapers/${activeVid.id}/comments/${id}/replies` })} 
+                   // 🟢 FIXED: Explicitly typed parameters to prevent Vercel error
+                   onReply={(id: string, username: string) => setReplyTo({ id, username, path: `wallpapers/${activeVid.id}/comments/${id}/replies` })} 
                 />
               ))}
-              {comments.length === 0 && <div className="text-center py-20 opacity-20"><MessageCircle className="mx-auto w-12 h-12 mb-2"/><p className="text-xs font-black uppercase">No syncs yet</p></div>}
             </div>
 
-            {/* Comment Input */}
             <div className="p-4 bg-black border-t border-white/5 pb-safe">
               {replyTo && (
-                <div className="flex items-center justify-between bg-zinc-900 px-4 py-2 rounded-t-xl border-x border-t border-white/5">
-                  <p className="text-[10px] font-bold text-zinc-400">Replying to <span className="text-red-500">@{replyTo.username}</span></p>
+                <div className="flex items-center justify-between bg-zinc-900 px-4 py-2 rounded-t-xl text-[10px] font-bold">
+                  <span>Replying to <span className="text-red-500">@{replyTo.username}</span></span>
                   <button onClick={() => setReplyTo(null)}><X className="w-3 h-3"/></button>
                 </div>
               )}
               <div className="flex gap-2 items-center">
-                <input type="text" value={commentInput} onChange={(e) => setCommentInput(e.target.value)} placeholder={replyTo ? "Write a reply..." : "Add a comment..."} className={`flex-1 bg-zinc-900 border-white/5 outline-none px-5 py-3 text-sm text-white ${replyTo ? 'rounded-b-2xl' : 'rounded-full'}`} />
-                <button onClick={submitComment} className="bg-red-600 p-3 rounded-full active:scale-90 transition"><Send className="w-4 h-4"/></button>
+                <input type="text" value={commentInput} onChange={(e) => setCommentInput(e.target.value)} placeholder="Add a comment..." className="flex-1 bg-zinc-900 border-white/5 outline-none px-5 py-3 text-sm text-white rounded-full" />
+                <button onClick={submitComment} className="bg-red-600 p-3 rounded-full"><Send className="w-4 h-4"/></button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🚀 SHARE DRAWER (Original Style) */}
       {showShare && activeVid && (
         <div className="fixed inset-0 z-[500]">
            <div className="drawer-mask" onClick={() => setShowShare(false)} />
            <div className="drawer-content p-6 animate-in slide-in-from-bottom">
-              <div className="p-4 border-b border-white/5 text-center relative mb-4">
-                 <h3 className="font-bold text-xs uppercase tracking-widest text-zinc-500">Share Sync</h3>
-              </div>
-              <div className="flex gap-6 justify-center pb-8 border-b border-white/5">
-                 <ShareIcon icon={<LinkIcon/>} label="Link" color="bg-zinc-800" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid.id}`); triggerToast("Link Copied!"); setShowShare(false); }} />
-                 <ShareIcon icon={<Send className="fill-white w-5 h-5"/>} label="WhatsApp" color="bg-green-600" onClick={() => window.open(`https://wa.me/?text=Check this! ${window.location.origin}/watch/${activeVid.id}`)} />
-                 <ShareIcon icon={<Download/>} label="Save" color="bg-blue-600" onClick={() => triggerToast("Downloading...")} />
-              </div>
               <button onClick={() => setShowShare(false)} className="w-full py-4 mt-4 bg-zinc-900 rounded-2xl font-bold text-zinc-500">Cancel</button>
            </div>
         </div>
@@ -235,15 +229,16 @@ export default function Feed() {
   );
 }
 
-// --- RECURSIVE COMMENT ITEM ---
-function CommentItem({ comment, vidId, onReply }: any) {
-  const [replies, setReplies] = useState<any[]>([]);
+// --- Components ---
+
+function CommentItem({ comment, vidId, onReply }: { comment: CommentData, vidId: string, onReply: (id: string, username: string) => void }) {
+  const [replies, setReplies] = useState<CommentData[]>([]);
   const [showReplies, setShowReplies] = useState(false);
 
   useEffect(() => {
     if (!showReplies) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${vidId}/comments/${comment.id}/replies`), orderBy("createdAt", "asc")), (snap) => {
-      setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() } as CommentData)));
     });
     return () => unsub();
   }, [showReplies, vidId, comment.id]);
@@ -251,43 +246,27 @@ function CommentItem({ comment, vidId, onReply }: any) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-3">
-        <img src={comment.userPhoto || `https://api.dicebear.com/7.x/adventurer/svg?seed=${comment.userId}`} className="w-9 h-9 rounded-full object-cover border border-white/5" alt="u" />
+        <img src={comment.userPhoto || `https://api.dicebear.com/7.x/adventurer/svg?seed=${comment.userId}`} className="w-9 h-9 rounded-full object-cover" alt="u" />
         <div className="flex-1">
-          <p className="text-xs font-black text-zinc-400 mb-0.5">@{comment.username}</p>
-          <p className="text-sm text-white leading-relaxed">{comment.text}</p>
+          <p className="text-xs font-black text-zinc-400">@{comment.username}</p>
+          <p className="text-sm text-white">{comment.text}</p>
           <div className="flex gap-4 mt-2">
-             <button onClick={() => onReply(comment.id, comment.username)} className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter">Reply</button>
-             <button onClick={() => setShowReplies(!showReplies)} className="text-[10px] font-black text-red-500 uppercase tracking-tighter">
-                {showReplies ? "Hide" : replies.length > 0 ? `View ${replies.length} replies` : "Show replies"}
+             <button onClick={() => onReply(comment.id, comment.username)} className="text-[10px] font-black text-zinc-500 uppercase">Reply</button>
+             <button onClick={() => setShowReplies(!showReplies)} className="text-[10px] font-black text-red-500 uppercase">
+                {showReplies ? "Hide" : replies.length > 0 ? `View ${replies.length} replies` : "Replies"}
              </button>
           </div>
         </div>
       </div>
-      {/* REPLIES CONTAINER */}
-      {showReplies && (
-        <div className="ml-10 border-l-2 border-zinc-900 pl-4 space-y-6 mt-2">
-           {replies.map(r => (
-             <CommentItem key={r.id} comment={r} vidId={vidId} onReply={onReply} />
-           ))}
-        </div>
-      )}
+      {showReplies && <div className="ml-10 border-l border-zinc-900 pl-4 space-y-6 mt-2">
+        {replies.map(r => <CommentItem key={r.id} comment={r} vidId={vidId} onReply={onReply} />)}
+      </div>}
     </div>
   );
 }
 
-// --- VIDEO SLIDE COMPONENT ---
-function VideoSlide({ video, muted, setMuted, onShare, onComment, playbackRate }: any) {
-  const { user } = useAuth();
+function VideoSlide({ video, muted, setMuted, onShare, onComment }: VideoSlideProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [commentCount, setCommentCount] = useState(0);
-  const [liked, setLiked] = useState(video.likes?.includes(user?.uid));
-
-  // Live Comment Count Listener
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, `wallpapers/${video.id}/comments`), (snap) => setCommentCount(snap.size));
-    return () => unsub();
-  }, [video.id]);
-
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => { e.isIntersecting ? videoRef.current?.play() : videoRef.current?.pause(); }, { threshold: 0.7 });
     if (videoRef.current) obs.observe(videoRef.current);
@@ -297,32 +276,20 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, playbackRate }
   return (
     <section className="feed-item">
       <video ref={videoRef} src={video.url} loop muted={muted} playsInline className="h-full w-full object-cover md:object-contain md:max-w-[480px]" />
-      
-      {/* Sidebar */}
       <div className="absolute right-4 bottom-32 flex flex-col gap-6 items-center z-40 pointer-events-auto">
         <div className="relative mb-2">
           <Link href={`/user/${video.userId}`}><img src={video.creator?.photoURL} className="w-12 h-12 rounded-full border-2 border-white object-cover" /></Link>
           <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black"><Plus className="w-3 h-3 text-white" /></div>
         </div>
-        <button onClick={() => setLiked(!liked)} className="flex flex-col items-center"><Heart className={`w-8 h-8 ${liked ? 'fill-red-600 text-red-600' : 'text-white'}`} /><span className="text-[10px] font-black">{video.likes?.length || 0}</span></button>
-        <button onClick={onComment} className="flex flex-col items-center"><MessageCircle className="w-8 h-8 text-white" /><span className="text-[10px] font-black">{commentCount}</span></button>
-        <button onClick={onShare} className="flex flex-col items-center"><Share2 className="w-8 h-8 text-white" /><span className="text-[10px] font-black text-shadow uppercase">Share</span></button>
+        <button className="flex flex-col items-center"><Heart className="w-8 h-8 text-white" /><span className="text-[10px] font-black">{video.likes?.length || 0}</span></button>
+        <button onClick={onComment} className="flex flex-col items-center"><MessageCircle className="w-8 h-8 text-white" /></button>
+        <button onClick={onShare} className="flex flex-col items-center"><Share2 className="w-8 h-8 text-white" /></button>
       </div>
-
       <div className="absolute bottom-0 left-0 w-full p-6 pb-28 bg-gradient-to-t from-black/90 via-black/20 to-transparent z-30 pointer-events-none">
         <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }} className="pointer-events-auto mb-4 bg-black/40 p-3 rounded-full border border-white/10 backdrop-blur-md">{muted ? <VolumeX className="w-4 h-4"/> : <Volume2 className="w-4 h-4"/>}</button>
         <Link href={`/user/${video.userId}`} className="font-black text-lg text-white text-shadow block pointer-events-auto">@{video.creator?.username || video.username}</Link>
-        <p className="text-sm text-zinc-200 text-shadow line-clamp-2 max-w-[80%]">{video.title}</p>
+        <p className="text-sm text-zinc-100 text-shadow line-clamp-2 max-w-[80%]">{video.title}</p>
       </div>
     </section>
-  );
-}
-
-function ShareIcon({ icon, label, color, onClick }: any) {
-  return (
-    <div onClick={onClick} className="flex flex-col items-center gap-2 min-w-[70px] cursor-pointer">
-      <div className={`w-12 h-12 ${color} rounded-full flex items-center justify-center text-white`}>{icon}</div>
-      <span className="text-[10px] font-black text-zinc-500 uppercase">{label}</span>
-    </div>
   );
 }
