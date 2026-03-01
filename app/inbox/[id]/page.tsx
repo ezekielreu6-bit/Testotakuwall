@@ -114,7 +114,7 @@ export default function ChatRoom() {
     <main className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
       
       {/* 🟢 FIXED RESPONSIVE HEADER */}
-      <header className="fixed top-0 left-0 right-0 z-[100] bg-black/95 backdrop-blur-xl border-b border-white/5 pt-safe px-4 h-[115px] flex items-end pb-4">
+      <header className="fixed top-0 left-0 right-0 z-[100] bg-black/95 backdrop-blur-xl border-b border-white/5 pt-safe px-4 h-[95px] flex items-end pb-4">
         <div className="w-full flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0" onClick={() => setShowInfo(true)}>
             <button onClick={(e) => { e.stopPropagation(); router.back(); }} className="p-1 active:scale-90 transition">
