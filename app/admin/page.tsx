@@ -179,7 +179,7 @@ export default function AdminDashboard() {
         <button onClick={() => auth.signOut()} className="p-2.5 bg-red-600/10 text-red-500 rounded-xl active:scale-90 transition"><Power className="w-5 h-5"/></button>
       </header>
 
-      <main className="pt-24 px-6 max-w-7xl mx-auto">
+          <main className="scroll-container no-scrollbar pb-40 relative bg-black">
         
         {/* Stats Section */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
