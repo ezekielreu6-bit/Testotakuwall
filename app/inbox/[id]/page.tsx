@@ -22,6 +22,8 @@ const ANIME_STICKERS = [
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHpueXpueXpueXpueXpueXpueXpueXpueXpueXpueXpueXpueSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/vYyocN_99VlEk/giphy.gif",
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHpueXpueXpueXpueXpueXpueXpueXpueXpueXpueXpueXpueSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/3oz8xAFtqo0LnsYPkY/giphy.gif",
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHpueXpueXpueXpueXpueXpueXpueXpueXpueXpueXpueXpueSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/l0HlSno605w178BZS/giphy.gif",
+"https://media0.giphy.com/media/v1.Y2lkPTZjMDliOTUyZ2FiODB2aHI0M2xjNHA3NHhmcmk5Y2hhY2JmYTBuZHlhOG9vYXU3cSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/OpfkuToK5gSHK/giphy.gif",
+
 ];
 
 const EMOJIS = ["🔥","😂","❤️","✨","🙌","💀","👺","🍥","⚡","🎌","🎮","👑","🍜","🍙","🍡","💔","👀","👍","✅","📍"];
