@@ -24,7 +24,11 @@ const ANIME_STICKERS = [
   "https://media.giphy.com/media/l0HlSno605w178BZS/giphy.gif",
   "https://media.giphy.com/media/OpfkuToK5gSHK/giphy.gif",
   "https://media.giphy.com/media/pMLAvZ8MDYc5bOYTpc/giphy.gif",
-  "https://media.giphy.com/media/xdLH51eNWZAHrwy5mf/giphy.gif"
+  "https://media.giphy.com/media/xdLH51eNWZAHrwy5mf/giphy.gif",
+ "https://media0.giphy.com/media/v1.Y2lkPTZjMDliOTUyZ2FiODB2aHI0M2xjNHA3NHhmcmk5Y2hhY2JmYTBuZHlhOG9vYXU3cSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/OpfkuToK5gSHK/giphy.gif",
+
+ "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyang3cGczcGhnZXNmemdjY29wbGkyODRmZjF4OXZtbGt1bG96OW5laCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pMLAvZ8MDYc5bOYTpc/giphy.gif",
+ "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyem11cHI1b2V1OHNqY2NyYXNmdXZkNmIwZjBlcGpxeDRxdWlpZjB4bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xdLH51eNWZAHrwy5mf/giphy.gif"
 ];
 
 const EMOJIS = ["🔥","😂","❤️","✨","🙌","💀","👺","🍥","⚡","🎌","🎮","👑","🍜","🍙","🍡","💔","👀","👍","✅","📍"];
