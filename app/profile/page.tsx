@@ -12,7 +12,7 @@ import {
   Settings, Share2, Camera, Grid, Image as ImageIcon, 
   Heart, X, LogOut, ChevronRight, User, TrendingUp, 
   Lock, FileText, Trash2, ShieldCheck, Play, ArrowLeft,
-  Mail, ShieldAlert, CheckCircle2, AlertCircle
+  Mail, ShieldAlert, CheckCircle2, AlertCircle, Info
 } from "lucide-react";
 import { Wallpaper, UserData } from "@/types";
 import Navbar from "@/components/Navbar";
@@ -22,14 +22,14 @@ type Tab = 'videos' | 'images' | 'likes';
 type SettingsView = 'main' | 'account' | 'privacy' | 'terms';
 
 export default function ProfilePage() {
-  const { user, userData } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
   const router = useRouter();
 
   // --- UI State ---
   const [activeTab, setActiveTab] = useState<Tab>('videos');
   const [uploads, setUploads] = useState<Wallpaper[]>([]);
   const [stats, setStats] = useState({ followers: 0, following: 0, likes: 0 });
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
   
   // --- Modals & Sub-view State ---
   const [showSettings, setShowSettings] = useState(false);
@@ -46,34 +46,41 @@ export default function ProfilePage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Data Fetching
+  // 1. Protection & Data Fetching
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user) {
+      router.replace("/auth");
+      return;
+    }
 
     setEditName(userData?.username || "");
     setEditBio(userData?.bio || "");
 
+    // Real-time followers/following
     const unsubFollowers = onSnapshot(collection(db, `users/${user.uid}/followers`), (s) => setStats(prev => ({...prev, followers: s.size})));
     const unsubFollowing = onSnapshot(collection(db, `users/${user.uid}/following`), (s) => setStats(prev => ({...prev, following: s.size})));
 
+    // User content query (Requires index)
     const q = query(collection(db, "wallpapers"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
     const unsubWalls = onSnapshot(q, (snap) => {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Wallpaper));
       setUploads(items);
       const totalLikes = items.reduce((acc, curr) => acc + (curr.likes?.length || 0), 0);
       setStats(prev => ({...prev, likes: totalLikes}));
-      setLoading(false);
+      setDataLoading(false);
     });
 
     return () => { unsubFollowers(); unsubFollowing(); unsubWalls(); };
-  }, [user, userData]);
+  }, [user, userData, authLoading, router]);
 
+  // 2. Notification System
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 2. Avatar Engine
+  // 3. Avatar & Photo Handlers
   const openAvatarPicker = () => {
     const seeds = Array.from({ length: 12 }, () => Math.random().toString(36).substring(7));
     setRandomSeeds(seeds);
@@ -86,14 +93,14 @@ export default function ProfilePage() {
     try {
       await updateDoc(doc(db, "users", user.uid), { photoURL: url });
       setShowAvatarPicker(false);
-      showToast("Avatar Updated!");
-    } catch (e) { showToast("Failed to update", "error"); }
+      showToast("Avatar Synced!");
+    } catch (e) { showToast("Failed to sync", "error"); }
   };
 
   const handleCustomUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    showToast("Syncing Photo...");
+    showToast("Processing Image...");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
@@ -107,32 +114,39 @@ export default function ProfilePage() {
     } catch (err) { showToast("Upload failed", "error"); }
   };
 
+  // 4. Form Actions
   const saveProfile = async () => {
     if (!user || !editName.trim()) return;
-    await updateDoc(doc(db, "users", user.uid), {
-      username: editName.toLowerCase().replace(/\s+/g, ''),
-      bio: editBio
-    });
-    setShowEdit(false);
-    showToast("Profile Saved!");
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        username: editName.toLowerCase().replace(/\s+/g, ''),
+        bio: editBio
+      });
+      setShowEdit(false);
+      showToast("Changes Saved!");
+    } catch (e) { showToast("Name taken", "error"); }
   };
 
-  if (!user || !userData) return <div className="h-screen bg-black" />;
+  if (authLoading || (user && !userData)) {
+    return <div className="h-screen w-screen bg-black flex items-center justify-center"><div className="otaku-spinner" /></div>;
+  }
+
+  if (!user || !userData) return null;
 
   return (
     <main className="scroll-container no-scrollbar pb-40 relative bg-black">
       
-      {/* 🍞 OTAKU TOAST */}
+      {/* 🍞 TOAST */}
       {toast && (
         <div className={`fixed top-20 right-0 z-[500] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 transform transition-all animate-in slide-in-from-right duration-300 ${
           toast.type === 'error' ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-red-600 text-white'
         }`}>
           {toast.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
-          <span className="font-bold text-xs uppercase tracking-widest text-shadow">{toast.msg}</span>
+          <span className="font-bold text-xs uppercase tracking-widest">{toast.msg}</span>
         </div>
       )}
 
-      {/* 🟢 FIXED HEADER */}
+      {/* 🟢 HEADER */}
       <header className="fixed top-0 left-0 right-0 h-[65px] bg-black/80 backdrop-blur-xl border-b border-white/5 z-50 px-6 flex items-center justify-between pt-safe">
         <h1 className="text-xl font-black italic tracking-tighter"><span className="text-red-600">OTAKU</span>WALL</h1>
         <button 
@@ -143,7 +157,7 @@ export default function ProfilePage() {
         </button>
       </header>
 
-      {/* ⚪️ HERO SECTION */}
+      {/* ⚪️ PROFILE HERO */}
       <div className="pt-24 px-6 flex flex-col items-center">
         <div className="relative group">
           <div className="w-28 h-28 rounded-[40px] overflow-hidden border-2 border-zinc-800 bg-zinc-900 shadow-2xl">
@@ -160,23 +174,17 @@ export default function ProfilePage() {
         <div className="mt-5 text-center">
           <div className="flex items-center justify-center gap-1.5 flex-wrap">
             <h1 className="text-2xl font-black tracking-tight italic">@{userData.username}</h1>
-            {userData.isPremium ? (
-              <VerifiedBadge className="w-5 h-5" />
-            ) : (
-              <button 
-                onClick={() => router.push('/premium')}
-                className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-1 rounded-full active:scale-95 transition"
-              >
+            {userData.isPremium ? <VerifiedBadge className="w-5 h-5" /> : (
+              <button onClick={() => router.push('/premium')} className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-1 rounded-full active:scale-95 transition">
                 <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-red-600/40"><path d={rosettePath}/></svg>
                 <span className="text-[9px] font-black uppercase text-red-500 tracking-tighter">Get Verified</span>
               </button>
             )}
           </div>
-          <p className="text-sm text-zinc-500 font-medium mt-1.5 max-w-[280px] leading-relaxed">
-            {userData.bio || 'Anime Enthusiast • Collector'}
-          </p>
+          <p className="text-sm text-zinc-500 font-medium mt-1.5 max-w-[280px] leading-relaxed">{userData.bio || 'Anime Enthusiast'}</p>
         </div>
 
+        {/* Stats */}
         <div className="w-full max-w-sm mt-8 p-6 bg-zinc-900/30 border border-white/5 rounded-[32px] flex justify-between items-center backdrop-blur-sm shadow-xl">
            <StatItem label="Followers" value={stats.followers} />
            <div className="w-px h-8 bg-white/10" />
@@ -187,31 +195,27 @@ export default function ProfilePage() {
 
         <div className="flex gap-2 w-full max-w-md mt-8 px-2">
            <button onClick={() => setShowEdit(true)} className="flex-1 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition shadow-lg">Edit Profile</button>
-           <button 
-             onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/user/${user.uid}`); showToast("Profile Link Copied!"); }}
-             className="px-5 bg-zinc-900 border border-white/10 rounded-2xl active:scale-95 transition"
-           >
-             <Share2 className="w-5 h-5 text-white"/>
-           </button>
+           <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/user/${user.uid}`); showToast("Link Copied!"); }} className="px-5 bg-zinc-900 border border-white/10 rounded-2xl text-white active:scale-90 transition"><Share2 className="w-5 h-5"/></button>
         </div>
       </div>
 
-      {/* 🔵 TABS & MEDIA GRID */}
+      {/* 🔵 CONTENT TABS */}
       <div className="sticky top-[65px] bg-black z-30 flex border-b border-zinc-900 mt-8">
         <TabBtn active={activeTab === 'videos'} onClick={() => setActiveTab('videos')} icon={<Grid className="w-5 h-5" />} />
         <TabBtn active={activeTab === 'images'} onClick={() => setActiveTab('images')} icon={<ImageIcon className="w-5 h-5" />} />
         <TabBtn active={activeTab === 'likes'} onClick={() => setActiveTab('likes')} icon={<Heart className="w-5 h-5" />} />
       </div>
 
+      {/* 🎥 MEDIA GRID */}
       <div className="grid grid-cols-3 gap-[2px]">
         {uploads.filter(u => activeTab === 'videos' ? u.fileType === 'video' : u.fileType === 'image').map(item => (
-          <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="aspect-[3/4] bg-zinc-900 relative group overflow-hidden cursor-pointer">
+          <div key={item.id} onClick={() => router.push(`/watch/${item.id}?uid=${user.uid}`)} className="aspect-[3/4] bg-zinc-900 relative group overflow-hidden cursor-pointer">
             {item.fileType === 'video' ? (
               <video src={`${item.url}#t=0.1`} className="w-full h-full object-cover" muted playsInline />
             ) : (
               <img src={item.url} className="w-full h-full object-cover" alt="post" />
             )}
-            <div className="absolute bottom-2 left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition duration-300">
+            <div className="absolute bottom-2 left-2 flex items-center gap-1 opacity-100">
                  <Play className="w-3 h-3 fill-white" />
                  <span className="text-[10px] font-bold">{item.views || 0}</span>
             </div>
@@ -219,20 +223,18 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      {/* 🟡 EDIT PROFILE MODAL */}
+      {/* 🟡 EDIT MODAL (DiceBear Integration) */}
       {showEdit && (
         <div className="fixed inset-0 bg-black/90 z-[110] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in duration-300">
-           <div className="w-full max-w-sm bg-zinc-900 rounded-[40px] p-8 border border-white/10 animate-in zoom-in-95 shadow-2xl">
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-xl font-black italic">Edit Profile</h2>
-                <button onClick={() => setShowEdit(false)} className="p-2 bg-white/5 rounded-full"><X className="w-5 h-5"/></button>
-              </div>
+           <div className="w-full max-w-sm bg-zinc-900 rounded-[40px] p-8 border border-white/10 animate-in zoom-in-95 shadow-2xl relative">
+              <button onClick={() => setShowEdit(false)} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full"><X className="w-4 h-4"/></button>
+              <h2 className="text-xl font-black italic mb-8">Edit Profile</h2>
 
               <div className="flex flex-col items-center mb-8">
                  <div className="w-20 h-20 rounded-[25px] overflow-hidden border-2 border-white/10 mb-3 bg-black">
-                    <img src={userData.photoURL} className="w-full h-full object-cover opacity-60" />
+                    <img src={userData.photoURL} className="w-full h-full object-cover opacity-50" />
                  </div>
-                 <button onClick={openAvatarPicker} className="text-red-500 text-[10px] font-black uppercase tracking-widest">Change Photo</button>
+                 <button onClick={openAvatarPicker} className="text-red-500 text-[10px] font-black uppercase tracking-widest active:scale-95">Change Photo</button>
               </div>
               
               <div className="space-y-5">
@@ -245,7 +247,7 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* 🎭 DICEBEAR AVATAR PICKER */}
+      {/* 🎭 DICEBEAR AVATAR PICKER DRAWER */}
       {showAvatarPicker && (
         <div className="fixed inset-0 z-[200]">
            <div className="drawer-mask" onClick={() => setShowAvatarPicker(false)} />
@@ -280,9 +282,7 @@ export default function ProfilePage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h2 className="font-black italic text-lg text-white uppercase tracking-tight">
-            {settingsView}
-          </h2>
+          <h2 className="font-black italic text-lg text-white uppercase tracking-tight">{settingsView}</h2>
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar pb-32">
@@ -292,14 +292,12 @@ export default function ProfilePage() {
                   <SettingsItem icon={<User/>} label="Account Info" onClick={() => setSettingsView('account')} />
                   <SettingsItem icon={<TrendingUp className="text-red-500"/>} label="Promote Content" onClick={() => router.push('/ads')} />
                </SettingsGroup>
-
                <SettingsGroup label="Privacy & Legal">
                   <SettingsItem icon={<Lock/>} label="Privacy Policy" onClick={() => setSettingsView('privacy')} />
                   <SettingsItem icon={<FileText/>} label="Terms of Use" onClick={() => setSettingsView('terms')} />
                </SettingsGroup>
-
                <SettingsGroup label="System">
-                  <SettingsItem icon={<Trash2/>} label="Clear Cache" sub={cacheSize} onClick={() => { localStorage.clear(); setCacheSize("0 KB"); showToast("Cache Cleared!"); }} />
+                  <SettingsItem icon={<Trash2/>} label="Clear Cache" sub={cacheSize} onClick={() => { localStorage.clear(); setCacheSize("0 KB"); showToast("Cache Purged!"); }} />
                   <button onClick={() => signOut(auth).then(() => router.push('/auth'))} className="w-full p-5 mt-6 bg-red-600/10 text-red-500 rounded-3xl font-black text-xs uppercase flex items-center justify-center gap-2 border border-red-600/20 active:scale-95 transition">
                     <LogOut className="w-4 h-4"/> Log Out
                   </button>
@@ -308,17 +306,21 @@ export default function ProfilePage() {
           )}
 
           {settingsView === 'account' && (
-            <div className="space-y-6 animate-in slide-in-from-right-4">
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                <div className="p-6 bg-zinc-900/50 rounded-[32px] border border-white/5">
-                  <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1">Registered Email</p>
-                  <p className="font-bold text-white mb-6 flex items-center gap-2 truncate"><Mail className="w-4 h-4 text-zinc-500"/> {userData.email}</p>
-                  <button onClick={() => { sendPasswordResetEmail(auth, userData.email || ""); showToast("Reset link sent!"); }} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest active:bg-zinc-800 transition">Send Reset Link</button>
+                  <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1 ml-1">Registered Email</p>
+                  <p className="font-bold text-white mb-6 flex items-center gap-2 truncate ml-1"><Mail className="w-4 h-4 text-zinc-500"/> {userData.email}</p>
+                  <button onClick={() => { sendPasswordResetEmail(auth, userData.email || ""); showToast("Link sent to email!"); }} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest active:bg-zinc-800 transition">Send Reset Link</button>
+               </div>
+               <div className="p-4 bg-red-900/10 border border-red-900/20 rounded-2xl flex items-start gap-3">
+                  <ShieldAlert className="text-red-500 w-5 h-5 shrink-0" />
+                  <p className="text-[11px] text-zinc-400 font-medium leading-relaxed">Deleting your account is permanent and cannot be undone. You will lose all your syncs and status badge.</p>
                </div>
             </div>
           )}
           
-          {settingsView === 'privacy' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">OtakuWall uses end-to-end encryption for syncs. Your data is never sold.</div>}
-          {settingsView === 'terms' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">NSFW content is forbidden. Violation results in permanent ban.</div>}
+          {settingsView === 'privacy' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">OtakuWall uses end-to-end encryption for private sync sessions. Your data is your property.</div>}
+          {settingsView === 'terms' && <div className="p-6 bg-zinc-900 rounded-[32px] text-sm text-zinc-400 leading-relaxed">Community Guidelines: NSFW content is strictly prohibited. Violations lead to permanent account suspension.</div>}
         </div>
       </div>
 
@@ -327,7 +329,7 @@ export default function ProfilePage() {
   );
 }
 
-// --- SUB-COMPONENTS ---
+// --- REUSABLE COMPONENTS ---
 function StatItem({ label, value }: { label: string, value: number }) {
   return (
     <div className="flex flex-col items-center">
