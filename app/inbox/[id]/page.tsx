@@ -29,6 +29,7 @@ const ANIME_STICKERS = [
 
 "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyem11cHI1b2V1OHNqY2NyYXNmdXZkNmIwZjBlcGpxeDRxdWlpZjB4bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xdLH51eNWZAHrwy5mf/giphy.gif",
 
+"https://giphy.com/gifs/reactiongifs-rrLt0FcGrDeBq",
 
 ];
 
