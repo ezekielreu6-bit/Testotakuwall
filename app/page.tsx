@@ -219,16 +219,23 @@ export default function Feed() {
                     </div>
                 ))}
               </div>
-              <div className="flex gap-6 justify-center pb-8 border-b border-white/5">
-                 <div onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid.id}`); triggerToast("Link Copied!"); setShowShare(false); }} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
-                    <div className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-white shadow-xl border border-white/5"><LinkIcon/></div>
-                    <span className="text-[10px] font-black uppercase text-zinc-500">Link</span>
-                 </div>
-                 <div onClick={() => window.open(`https://wa.me/?text=Check this sync! ${window.location.origin}/watch/${activeVid.id}`)} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
-                    <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center text-white shadow-xl"><Send className="w-5 h-5 fill-white"/></div>
-                    <span className="text-[10px] font-black uppercase text-zinc-500">WhatsApp</span>
-                 </div>
-              </div>
+              <<div className="flex gap-6 justify-center pb-8 border-b border-white/5">
+  <div onClick={() => { navigator.clipboard.writeText(shareUrl); triggerToast("Link Copied!"); setShowShare(false); }} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+    <div className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-white shadow-xl border border-white/5"><LinkIcon/></div>
+    <span className="text-[10px] font-black uppercase text-zinc-500">Link</span>
+  </div>
+  <div onClick={() => window.open(`https:                                                                                                                                     
+    <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center text-white shadow-xl"><Send className="w-5 h-5 fill-white"/></div>
+    <span className="text-[10px] font-black uppercase text-zinc-500">WhatsApp</span>
+  </div>
+  <div onClick={() => window.open(`https://twitter.com/intent/tweet?url=${shareUrl}&text=Check this sync!`)} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+    <div className="w-14 h-14 bg-black rounded-full flex items-center justify-center text-white shadow-xl">
+      <svg xmlns="http:                                                                                                                                                                                                                                                                                                         
+    </div>
+    <span className="text-[10px] font-black uppercase text-zinc-500">Twitter</span>
+  </div>
+</div>
+
               <div className="p-4 grid grid-cols-3 gap-4">
                  <div onClick={() => setShowSpeed(!showSpeed)} className="flex flex-col items-center gap-2 cursor-pointer transition">
                     <div className={`w-14 h-14 ${showSpeed ? 'bg-red-600' : 'bg-zinc-800'} rounded-2xl flex items-center justify-center text-zinc-400 shadow-lg`}><Zap className="w-6 h-6"/></div>
