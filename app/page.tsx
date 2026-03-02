@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase";
 import { 
   collection, query, where, getDocs, doc, getDoc, 
   limit, updateDoc, arrayUnion, arrayRemove, 
-  serverTimestamp, onSnapshot, addDoc, orderBy, startAt, endAt
+  setDoc, serverTimestamp, onSnapshot, addDoc, orderBy, startAt, endAt
 } from "firebase/firestore";
 import { 
   Heart, MessageCircle, Share2, Volume2, VolumeX, 
@@ -27,6 +27,15 @@ interface CommentData {
   createdAt: any;
 }
 
+interface VideoSlideProps {
+  video: Wallpaper & { creator?: UserData };
+  muted: boolean;
+  setMuted: (val: boolean) => void;
+  isFollowing: boolean;
+  onComment: () => void;
+  onShare: () => void;
+}
+
 export default function Feed() {
   const { user, userData } = useAuth();
   const [videos, setVideos] = useState<(Wallpaper & { creator?: UserData })[]>([]);
@@ -39,6 +48,7 @@ export default function Feed() {
   const [showSearch, setShowSearch] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [activeVid, setActiveVid] = useState<any>(null);
 
   // --- SEARCH ---
@@ -56,7 +66,7 @@ export default function Feed() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 1. Real-time Following Listener (Global Fix)
+  // 1. Real-time Following Listener
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(collection(db, `users/${user.uid}/following`), (snap) => {
@@ -65,7 +75,7 @@ export default function Feed() {
     return () => unsub();
   }, [user]);
 
-  // 2. Fetch Feed
+  // 2. Fetch Feed & Shuffle
   useEffect(() => {
     const fetchFeed = async () => {
       try {
@@ -83,19 +93,13 @@ export default function Feed() {
     fetchFeed();
   }, []);
 
-  // 3. Prefix Search Logic (Live suggestions)
+  // 3. Prefix Search Logic
   useEffect(() => {
-    if (searchQuery.length < 1) {
-      setSearchResults({ users: [], videos: [] });
-      return;
-    }
+    if (searchQuery.length < 1) { setSearchResults({ users: [], videos: [] }); return; }
     const delay = setTimeout(async () => {
       const qText = searchQuery.toLowerCase().trim();
-      // Prefix search for Users
       const uQ = query(collection(db, "users"), orderBy("username"), startAt(qText), endAt(qText + "\uf8ff"), limit(5));
-      // Prefix search for Videos
       const vQ = query(collection(db, "wallpapers"), orderBy("title"), startAt(searchQuery), endAt(searchQuery + "\uf8ff"), limit(10));
-      
       const [uSnap, vSnap] = await Promise.all([getDocs(uQ), getDocs(vQ)]);
       setSearchResults({
         users: uSnap.docs.map(d => ({ ...d.data(), uid: d.id } as UserData)),
@@ -105,7 +109,7 @@ export default function Feed() {
     return () => clearTimeout(delay);
   }, [searchQuery]);
 
-  // 4. Strong Comments Listener
+  // 4. Comments Listener
   useEffect(() => {
     if (!activeVid || !showComments) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${activeVid.id}/comments`), orderBy("createdAt", "asc")), (snap) => {
@@ -117,10 +121,7 @@ export default function Feed() {
   const submitComment = async () => {
     if (!user || !commentInput.trim() || !activeVid) return;
     const text = commentInput; setCommentInput("");
-    const path = replyTo 
-      ? `wallpapers/${activeVid.id}/comments/${replyTo.id}/replies`
-      : `wallpapers/${activeVid.id}/comments`;
-    
+    const path = replyTo ? `wallpapers/${activeVid.id}/comments/${replyTo.id}/replies` : `wallpapers/${activeVid.id}/comments`;
     await addDoc(collection(db, path), {
       text, userId: user.uid, username: userData?.username || "otaku",
       userPhoto: userData?.photoURL || "", createdAt: serverTimestamp()
@@ -131,13 +132,15 @@ export default function Feed() {
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden">
       
-      {/* 🟢 HEADER */}
+      {/* HEADER */}
       <header className="absolute top-0 left-0 right-0 p-6 z-50 flex justify-between items-center pt-safe pointer-events-none">
-        <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto"><span className="text-red-600">OTAKU</span>WALL</h1>
+        <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto italic uppercase tracking-tighter">
+          <span className="text-red-600">OTAKU</span>WALL
+        </h1>
         <button onClick={() => setShowSearch(true)} className="p-3 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full text-white pointer-events-auto active:scale-90 transition"><Search/></button>
       </header>
 
-      {/* 🟢 FEED */}
+      {/* FEED */}
       <main className="feed-container no-scrollbar">
         {loading ? <div className="h-full w-full flex items-center justify-center bg-black"><div className="otaku-spinner"></div></div> :
           videos.map((vid) => (
@@ -151,22 +154,22 @@ export default function Feed() {
         }
       </main>
 
-      {/* 🔍 FAST SEARCH MODAL */}
+      {/* 🔍 SEARCH MODAL */}
       <div className={`fixed inset-0 z-[500] transition-transform duration-300 ease-out bg-black ${showSearch ? 'translate-x-0' : 'translate-x-full'}`}>
         <header className="p-6 pt-safe border-b border-white/5 flex items-center gap-4">
            <button onClick={() => setShowSearch(false)} className="p-2 bg-zinc-900 rounded-full"><X/></button>
            <div className="flex-1 relative">
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all" />
+              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search otakus..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all" />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
            </div>
         </header>
         <div className="flex-1 overflow-y-auto p-6 no-scrollbar pb-32">
              <div className="space-y-4">
                 {searchResults.users.map(u => (
-                  <Link key={u.uid} href={`/user/${u.uid}`} onClick={() => setShowSearch(false)} className="flex items-center justify-between p-4 bg-zinc-900 rounded-[24px] border border-white/5 active:scale-95 transition">
+                  <Link key={u.uid} href={`/user/${u.uid}`} onClick={() => setShowSearch(false)} className="flex items-center justify-between p-4 bg-zinc-900 rounded-3xl border border-white/5">
                     <div className="flex items-center gap-3">
                         <img src={u.photoURL} className="w-12 h-12 rounded-full object-cover"/>
-                        <span className="font-black text-sm uppercase">@{u.username}</span>
+                        <span className="font-black text-sm uppercase italic">@{u.username}</span>
                     </div>
                     <ArrowRight className="text-red-600 w-4 h-4"/>
                   </Link>
@@ -189,19 +192,24 @@ export default function Feed() {
           <div className="drawer-mask" onClick={() => { setShowComments(false); setReplyTo(null); }} />
           <div className="drawer-content flex flex-col h-[75vh] animate-in slide-in-from-bottom duration-300">
             <header className="p-4 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
-              <span className="text-xs font-black uppercase text-zinc-500">Discussion Hub</span>
+              <span className="text-xs font-black uppercase text-zinc-500 tracking-widest">Discussion Hub</span>
               <button onClick={() => setShowComments(false)} className="p-2 bg-white/5 rounded-full"><X className="w-4 h-4"/></button>
             </header>
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-10">
               {comments.map((c) => (
-                <CommentItem key={c.id} comment={c} vidId={activeVid.id} onReply={(id, user) => setReplyTo({id, username: user})} />
+                <CommentItem 
+                   key={c.id} 
+                   comment={c} 
+                   vidId={activeVid.id} 
+                   onReply={(id: string, username: string) => setReplyTo({id, username})} 
+                />
               ))}
             </div>
             <div className="p-4 bg-black border-t border-white/5 pb-safe">
-              {replyTo && <div className="flex items-center justify-between bg-zinc-900 px-4 py-2 rounded-t-xl text-[10px] font-bold border-t border-white/5"><span>Replying to <span className="text-red-500">@{replyTo.username}</span></span><button onClick={() => setReplyTo(null)}><X className="w-3 h-3"/></button></div>}
+              {replyTo && <div className="flex items-center justify-between bg-zinc-900 px-4 py-2 rounded-t-xl text-[10px] font-bold border-t border-white/5"><span>Replying to <span className="text-red-600">@{replyTo.username}</span></span><button onClick={() => setReplyTo(null)}><X className="w-3 h-3"/></button></div>}
               <div className="flex gap-2 items-center">
                 <input type="text" value={commentInput} onChange={(e) => setCommentInput(e.target.value)} placeholder="Add a comment..." className={`flex-1 bg-zinc-900 border-white/5 outline-none px-5 py-3 text-sm text-white ${replyTo ? 'rounded-b-2xl' : 'rounded-full'}`} />
-                <button onClick={submitComment} className="bg-red-600 p-3 rounded-full"><Send className="w-4 h-4"/></button>
+                <button onClick={submitComment} className="bg-red-600 p-3 rounded-full shadow-lg active:scale-90 transition"><Send className="w-4 h-4"/></button>
               </div>
             </div>
           </div>
@@ -209,18 +217,32 @@ export default function Feed() {
       )}
 
       {/* 🚀 SHARE DRAWER */}
-      {showShare && (
+      {showShare && activeVid && (
         <div className="fixed inset-0 z-[600]">
-          <div className="drawer-mask" onClick={() => setShowShare(false)} />
-          <div className="drawer-content p-6 animate-in slide-in-from-bottom duration-300">
-             <div className="p-4 border-b border-white/5 text-center mb-6"><h3 className="font-bold text-xs uppercase text-zinc-500">Share Options</h3></div>
-             <div className="flex gap-6 justify-center pb-8 border-b border-white/5">
-                <ShareIcon icon={<LinkIcon/>} label="Link" color="bg-zinc-800" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid.id}`); triggerToast("Link Copied!"); setShowShare(false); }} />
-                <ShareIcon icon={<Send className="fill-white w-4 h-4"/>} label="WhatsApp" color="bg-green-600" onClick={() => window.open(`https://wa.me/?text=Check this out! ${window.location.origin}/watch/${activeVid.id}`)} />
-                <ShareIcon icon={<Download/>} label="Save" color="bg-blue-600" onClick={() => triggerToast("Starting Download...")} />
-             </div>
-             <button onClick={() => { setShowShare(false); setShowReport(true); }} className="w-full py-4 text-red-500 font-black text-[10px] uppercase mt-4">Report Content</button>
-          </div>
+           <div className="drawer-mask" onClick={() => setShowShare(false)} />
+           <div className="drawer-content p-6 animate-in slide-in-from-bottom duration-300">
+              <div className="p-4 border-b border-white/5 text-center relative mb-4">
+                 <h3 className="font-bold text-xs uppercase tracking-widest text-zinc-500">Share Sync</h3>
+                 <button onClick={() => setShowShare(false)} className="absolute right-0 top-3 text-zinc-600"><X className="w-5 h-5"/></button>
+              </div>
+              <div className="flex gap-6 justify-center pb-8 border-b border-white/5">
+                 <div onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid.id}`); triggerToast("Link Copied!"); setShowShare(false); }} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+                    <div className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-white shadow-xl"><LinkIcon/></div>
+                    <span className="text-[10px] font-black uppercase text-zinc-500">Link</span>
+                 </div>
+                 <div onClick={() => window.open(`https://wa.me/?text=Check this! ${window.location.origin}/watch/${activeVid.id}`)} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+                    <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center text-white shadow-xl"><Send className="w-5 h-5 fill-white"/></div>
+                    <span className="text-[10px] font-black uppercase text-zinc-500">WhatsApp</span>
+                 </div>
+                 <div onClick={() => triggerToast("Starting Download...", "info")} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+                    <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xl"><Download/></div>
+                    <span className="text-[10px] font-black uppercase text-zinc-500">Save</span>
+                 </div>
+              </div>
+              <button onClick={() => { setShowShare(false); setShowReport(true); }} className="w-full py-5 flex items-center justify-center gap-3 text-red-500 font-black text-[10px] uppercase bg-white/5 rounded-2xl mt-4">
+                <Flag className="w-4 h-4" /> Report content
+              </button>
+           </div>
         </div>
       )}
 
@@ -232,33 +254,41 @@ export default function Feed() {
               <h3 className="text-red-500 font-black uppercase text-sm mb-6 tracking-widest italic">Report reason</h3>
               <div className="space-y-3">
                  {["Inappropriate", "Copyright", "Spam", "Other"].map(r => (
-                   <button key={r} onClick={() => { triggerToast("Reported"); setShowReport(false); }} className="w-full p-5 bg-zinc-900 rounded-2xl text-left text-sm font-bold border border-white/5 active:border-red-600 transition">{r}</button>
+                   <button key={r} onClick={() => { triggerToast("Reported"); setShowReport(false); }} className="w-full p-5 bg-zinc-900 rounded-2xl text-left text-sm font-black border border-white/5 active:border-red-600 transition">{r}</button>
                  ))}
               </div>
            </div>
         </div>
       )}
 
-      {/* 🍞 TOAST */}
-      {toast && <div className="fixed top-24 right-0 z-[1000] px-6 py-4 rounded-l-2xl bg-zinc-900 border-l-4 border-red-600 text-white shadow-2xl animate-in slide-in-from-right duration-300 font-bold uppercase text-[11px] tracking-widest">{toast.msg}</div>}
+      {/* 🍞 TOAST UI */}
+      {toast && (
+        <div className={`fixed top-24 right-0 z-[1000] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 bg-zinc-900 border-red-600 text-white animate-in slide-in-from-right duration-300 font-bold uppercase text-[11px]`}>
+          {toast.msg}
+        </div>
+      )}
 
       <Navbar />
     </div>
   );
 }
 
-// --- Video Slide ---
+// --- VIDEO SLIDE COMPONENT ---
+
 function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing }: any) {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [commentCount, setCommentCount] = useState(0);
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState<number>(video.likes?.length || 0);
   const [isPaused, setIsPaused] = useState(false);
-  const lastClick = useRef(0);
+  const lastClickTime = useRef(0);
 
   useEffect(() => {
     setLiked(video.likes?.includes(user?.uid));
-  }, [user, video.likes]);
+    const unsub = onSnapshot(collection(db, `wallpapers/${video.id}/comments`), (snap) => setCommentCount(snap.size));
+    return () => unsub();
+  }, [video.id, user, video.likes]);
 
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => { 
@@ -281,60 +311,68 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing }:
     }
   };
 
+  const handleFollow = async (e: any) => {
+    e.stopPropagation(); if (!user) return;
+    await setDoc(doc(db, `users/${user.uid}/following`, video.userId), { uid: video.userId });
+    await setDoc(doc(db, `users/${video.userId}/followers`, user.uid), { uid: user.uid });
+  };
+
   const handleInteraction = () => {
     const now = Date.now();
-    if (now - lastClick.current < 300) {
+    if (now - lastClickTime.current < 300) {
       if (!liked) handleLike();
     } else {
-      setTimeout(() => { if (Date.now() - lastClick.current >= 300) {
+      setTimeout(() => { if (Date.now() - lastClickTime.current >= 300) {
           if (videoRef.current?.paused) { videoRef.current.play(); setIsPaused(false); }
           else { videoRef.current?.pause(); setIsPaused(true); }
       }}, 300);
     }
-    lastClick.current = now;
-  };
-
-  const followUser = async (e: any) => {
-    e.stopPropagation(); if (!user) return;
-    await setDoc(doc(db, `users/${user.uid}/following`, video.userId), { uid: video.userId });
-    await setDoc(doc(db, `users/${video.userId}/followers`, user.uid), { uid: user.uid });
+    lastClickTime.current = now;
   };
 
   return (
     <section className="feed-item" onClick={handleInteraction}>
       <video ref={videoRef} src={video.url} loop muted={muted} playsInline className="h-full w-full object-cover md:object-contain md:max-w-[480px]" />
       
-      {isPaused && <div className="absolute inset-0 flex items-center justify-center z-20 animate-in zoom-in duration-200"><div className="w-16 h-16 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center"><Play className="w-8 h-8 fill-white ml-1" /></div></div>}
+      {/* ⏸ PAUSE OVERLAY */}
+      {isPaused && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none animate-in fade-in zoom-in duration-200">
+           <div className="w-20 h-20 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
+              <Play className="w-10 h-10 fill-white text-white ml-1" />
+           </div>
+        </div>
+      )}
 
       <div className="absolute right-4 bottom-32 flex flex-col gap-6 items-center z-40 pointer-events-auto" onClick={e => e.stopPropagation()}>
         <div className="relative mb-2">
           <Link href={`/user/${video.userId}`}><img src={video.creator?.photoURL} className="w-12 h-12 rounded-full border-2 border-white object-cover" /></Link>
           {!isFollowing && user?.uid !== video.userId && (
-             <button onClick={followUser} className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black active:scale-125 transition"><Plus className="w-3 h-3 text-white" /></button>
+             <button onClick={handleFollow} className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black active:scale-125 transition"><Plus className="w-3 h-3 text-white" /></button>
           )}
         </div>
-        <button onClick={handleLike} className="flex flex-col items-center"><Heart className={`w-8 h-8 ${liked ? 'fill-red-600 text-red-600 scale-125' : 'text-white'} transition-all`} /><span className="text-[10px] font-black">{likesCount}</span></button>
-        <button onClick={onComment} className="flex flex-col items-center"><MessageCircle className="w-8 h-8 text-white" /><span className="text-[10px] font-black uppercase text-shadow">Sync</span></button>
-        <button onClick={onShare} className="flex flex-col items-center"><Share2 className="w-8 h-8 text-white" /><span className="text-[10px] font-black uppercase">Share</span></button>
+        <button onClick={handleLike} className="flex flex-col items-center gap-1"><Heart className={`w-8 h-8 ${liked ? 'fill-red-600 text-red-600 scale-125' : 'text-white'} transition-all`} /><span className="text-[10px] font-black text-shadow uppercase">{likesCount}</span></button>
+        <button onClick={onComment} className="flex flex-col items-center gap-1"><MessageCircle className="w-8 h-8 text-white" /><span className="text-[10px] font-black text-shadow uppercase">{commentCount}</span></button>
+        <button onClick={onShare} className="flex flex-col items-center gap-1"><Share2 className="w-8 h-8 text-white" /><span className="text-[10px] font-black text-shadow uppercase">Share</span></button>
       </div>
 
       <div className="absolute bottom-0 left-0 w-full p-6 pb-28 bg-gradient-to-t from-black/90 via-black/20 to-transparent z-30 pointer-events-none">
-        <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }} className="pointer-events-auto mb-4 bg-black/40 p-3 rounded-full border border-white/10 backdrop-blur-md">{muted ? <VolumeX className="w-4 h-4"/> : <Volume2 className="w-4 h-4"/>}</button>
-        <Link href={`/user/${video.userId}`} className="font-black text-lg text-white text-shadow block pointer-events-auto flex items-center gap-1">
-          @{video.creator?.username || video.username}
+        <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }} className="pointer-events-auto mb-4 bg-black/40 p-3 rounded-full border border-white/10 backdrop-blur-md">{muted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
+        </button>
+        <div className="flex items-center gap-1 mb-1 pointer-events-auto">
+          <Link href={`/user/${video.userId}`} className="font-black text-lg text-white text-shadow">@{video.creator?.username || video.username}</Link>
           {video.creator?.isPremium && <VerifiedBadge className="w-4 h-4" />}
-        </Link>
+        </div>
         <p className="text-sm text-zinc-100 text-shadow font-semibold line-clamp-2 max-w-[80%]">{video.title}</p>
       </div>
     </section>
   );
 }
 
-// --- Recursive Comments ---
-function CommentItem({ comment, vidId, onReply }: any) {
+// --- Recursive Comment Item ---
+
+function CommentItem({ comment, vidId, onReply }: { comment: CommentData, vidId: string, onReply: (id: string, user: string) => void }) {
   const [replies, setReplies] = useState<CommentData[]>([]);
   const [showReplies, setShowReplies] = useState(false);
-
   useEffect(() => {
     if (!showReplies) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${vidId}/comments/${comment.id}/replies`), orderBy("createdAt", "asc")), (snap) => {
@@ -360,20 +398,9 @@ function CommentItem({ comment, vidId, onReply }: any) {
           </div>
         </div>
       </div>
-      {showReplies && (
-        <div className="ml-10 border-l-2 border-zinc-900 pl-4 space-y-6 mt-2 animate-in slide-in-from-left-2 duration-300">
-          {replies.map(r => <CommentItem key={r.id} comment={r} vidId={vidId} onReply={onReply} />)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ShareIcon({ icon, label, color, onClick }: any) {
-  return (
-    <div onClick={onClick} className="flex flex-col items-center gap-2 min-w-[70px] cursor-pointer">
-      <div className={`w-14 h-14 ${color} rounded-full flex items-center justify-center text-white shadow-xl`}>{icon}</div>
-      <span className="text-[10px] font-black text-zinc-500 uppercase">{label}</span>
+      {showReplies && <div className="ml-10 border-l-2 border-zinc-900 pl-4 space-y-6 mt-2 animate-in slide-in-from-left-2 duration-300">
+        {replies.map(r => <CommentItem key={r.id} comment={r} vidId={vidId} onReply={onReply} />)}
+      </div>}
     </div>
   );
 }
