@@ -17,7 +17,7 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import Link from "next/link";
 import { Wallpaper, UserData } from "@/types";
 
-// --- Strict Types for Vercel Build ---
+// --- Strict Types ---
 interface CommentData {
   id: string;
   text: string;
@@ -25,6 +25,7 @@ interface CommentData {
   username: string;
   userPhoto?: string;
   createdAt: any;
+  parentId?: string | null;
 }
 
 interface VideoSlideProps {
@@ -46,7 +47,7 @@ export default function Feed() {
   const [followingList, setFollowingList] = useState<string[]>([]);
   const [friends, setFriends] = useState<UserData[]>([]);
 
-  // --- UI STATE ---
+  // --- UI MODAL STATES ---
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -54,12 +55,12 @@ export default function Feed() {
   const [showReport, setShowReport] = useState(false);
   const [activeVid, setActiveVid] = useState<any>(null);
 
-  // --- SEARCH STATE ---
+  // --- SEARCH STATES ---
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ users: UserData[], videos: Wallpaper[] }>({ users: [], videos: [] });
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- COMMENT STATE ---
+  // --- COMMENT STATES ---
   const [comments, setComments] = useState<CommentData[]>([]);
   const [commentInput, setCommentInput] = useState("");
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
@@ -70,7 +71,7 @@ export default function Feed() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 1. Core Data Listeners
+  // 1. Initial Data Fetching & Real-time Listeners
   useEffect(() => {
     const fetchFeed = async () => {
       try {
@@ -95,10 +96,11 @@ export default function Feed() {
     fetchFeed();
   }, [user]);
 
-  // 2. Search Logic (Prefix Matching)
+  // 2. Prefix-matching Search logic (Fast suggestions)
   useEffect(() => {
     if (searchQuery.length < 1) { setSearchResults({ users: [], videos: [] }); return; }
     const delay = setTimeout(async () => {
+      setIsSearching(true);
       const qText = searchQuery.toLowerCase().trim();
       const uQ = query(collection(db, "users"), orderBy("username"), startAt(qText), endAt(qText + "\uf8ff"), limit(5));
       const vQ = query(collection(db, "wallpapers"), orderBy("title"), startAt(searchQuery), endAt(searchQuery + "\uf8ff"), limit(10));
@@ -107,11 +109,12 @@ export default function Feed() {
         users: uSnap.docs.map(d => ({ ...d.data(), uid: d.id } as UserData)),
         videos: vSnap.docs.map(d => ({ ...d.data(), id: d.id } as Wallpaper))
       });
-    }, 200);
+      setIsSearching(false);
+    }, 250);
     return () => clearTimeout(delay);
   }, [searchQuery]);
 
-  // 3. Comments Listener
+  // 3. Comments Handler
   useEffect(() => {
     if (!activeVid || !showComments) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${activeVid.id}/comments`), orderBy("createdAt", "asc")), (snap) => {
@@ -131,44 +134,25 @@ export default function Feed() {
     setReplyTo(null);
   };
 
-  // 4. Drawer Handlers
-  const handleDownload = async () => {
-    if (!activeVid) return;
-    triggerToast("Starting Download...", "info");
-    try {
-      const res = await fetch(activeVid.url);
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `OtakuWall_${activeVid.id}.mp4`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      triggerToast("Saved to Device! 🔥");
-    } catch (e) { triggerToast("Download Error", "error"); }
-    setShowShare(false);
-  };
-
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden">
       
-      {/* 🍞 TOAST SYSTEM */}
+      {/* 🍞 OTAKU TOAST */}
       {toast && (
         <div className={`fixed top-24 right-0 z-[1000] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 bg-zinc-900 animate-in slide-in-from-right duration-300 ${
           toast.type === 'error' ? 'border-yellow-500 text-yellow-500' : toast.type === 'info' ? 'border-blue-500 text-blue-500' : 'border-red-600 text-white'
         }`}>
-          {toast.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
           <span className="font-bold text-[11px] uppercase tracking-widest">{toast.msg}</span>
         </div>
       )}
 
-      {/* HEADER */}
       <header className="absolute top-0 left-0 right-0 p-6 z-50 flex justify-between items-center pt-safe pointer-events-none">
-        <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto uppercase tracking-tighter">
+        <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto uppercase tracking-tighter italic">
           <span className="text-red-600">OTAKU</span>WALL
         </h1>
-        <button onClick={() => setShowSearch(true)} className="p-3 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full text-white pointer-events-auto active:scale-90 transition"><Search/></button>
+        <button onClick={() => setShowSearch(true)} className="p-3 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full text-white pointer-events-auto active:scale-90 transition shadow-lg"><Search/></button>
       </header>
 
-      {/* MAIN FEED */}
       <main className="feed-container no-scrollbar">
         {loading ? <div className="h-full w-full flex items-center justify-center bg-black"><div className="otaku-spinner"></div></div> :
           videos.map((vid) => (
@@ -183,21 +167,21 @@ export default function Feed() {
         }
       </main>
 
-      {/* 🔍 SEARCH MODAL */}
-      <div className={`fixed inset-0 z-[500] transition-transform duration-300 ease-out bg-black ${showSearch ? 'translate-x-0' : 'translate-x-full'}`}>
+      {/* 🔍 SEARCH MODAL (SLIDE FROM RIGHT) */}
+      <div className={`fixed inset-0 z-[500] transition-transform duration-500 bg-black ${showSearch ? 'translate-x-0' : 'translate-x-full'}`}>
         <header className="p-6 pt-safe border-b border-white/5 flex items-center gap-4 bg-zinc-950">
-           <button onClick={() => {setShowSearch(false); setSearchResults({users:[], videos:[]});}} className="p-2 bg-zinc-900 rounded-full active:scale-90 transition"><X/></button>
-           <div className="flex-1 relative">
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search otakus..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all text-white" />
+           <button onClick={() => {setShowSearch(false); setSearchQuery("");}} className="p-2 bg-zinc-900 rounded-full active:scale-90 transition"><X/></button>
+           <form onSubmit={(e) => e.preventDefault()} className="flex-1 relative">
+              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search syncs..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all text-white" />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-           </div>
+           </form>
         </header>
         <div className="flex-1 overflow-y-auto p-6 no-scrollbar pb-32">
              <div className="space-y-4">
                 {searchResults.users.map(u => (
                   <Link key={u.uid} href={`/user/${u.uid}`} onClick={() => setShowSearch(false)} className="flex items-center justify-between p-4 bg-zinc-900 rounded-[24px] border border-white/5 active:scale-95 transition">
                     <div className="flex items-center gap-3">
-                        <img src={u.photoURL} className="w-12 h-12 rounded-full object-cover border border-white/10" alt="u"/>
+                        <img src={u.photoURL} className="w-12 h-12 rounded-full object-cover" alt="u"/>
                         <span className="font-black text-sm uppercase italic">@{u.username}</span>
                     </div>
                     <ArrowRight className="text-red-600 w-4 h-4"/>
@@ -212,52 +196,51 @@ export default function Feed() {
                    ))}
                 </div>
              </div>
+             {searchQuery.length > 0 && searchResults.users.length === 0 && searchResults.videos.length === 0 && !isSearching && (
+                 <p className="text-center text-zinc-600 font-bold uppercase text-[10px] mt-20 tracking-widest">No correlates found</p>
+             )}
         </div>
       </div>
 
-      {/* 🚀 SHARE DRAWER (Full Original Layout) */}
+      {/* 🚀 SHARE DRAWER */}
       {showShare && activeVid && (
         <div className="fixed inset-0 z-[600]">
            <div className="drawer-mask" onClick={() => { setShowShare(false); setShowSpeed(false); }} />
            <div className="drawer-content p-6 animate-in slide-in-from-bottom duration-300">
               <div className="p-4 border-b border-white/5 text-center relative mb-4">
-                 <h3 className="font-bold text-xs uppercase tracking-widest text-zinc-500">Share Sync</h3>
+                 <h3 className="font-bold text-xs uppercase tracking-widest text-zinc-500 italic">Share Sync</h3>
                  <button onClick={() => setShowShare(false)} className="absolute right-0 top-3 text-zinc-600"><X className="w-5 h-5"/></button>
               </div>
 
-              {/* Row 1: Friends */}
+              {/* Friends Scroll */}
               <div className="flex gap-4 overflow-x-auto p-4 border-b border-white/5 no-scrollbar mb-4">
                 {friends.map((f, i) => (
-                    <div key={i} className="flex flex-col items-center min-w-[65px] gap-1 cursor-pointer active:scale-90 transition" onClick={() => triggerToast(`Sent to @${f.username}`)}>
+                    <div key={i} className="flex flex-col items-center min-w-[65px] gap-1 cursor-pointer active:scale-90 transition" onClick={() => triggerToast(`Shared with @${f.username}`)}>
                       <img src={f.photoURL} className="w-12 h-12 rounded-full object-cover border border-white/10" alt="f"/>
                       <span className="text-[9px] font-bold text-zinc-500 truncate w-14 text-center">@{f.username}</span>
                     </div>
                 ))}
               </div>
 
-              {/* Row 2: Apps */}
+              {/* Social Apps */}
               <div className="flex gap-6 justify-center pb-8 border-b border-white/5">
                  <div onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid.id}`); triggerToast("Link Copied!"); setShowShare(false); }} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
                     <div className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-white shadow-xl border border-white/5"><LinkIcon/></div>
                     <span className="text-[10px] font-black uppercase text-zinc-500">Link</span>
                  </div>
-                 <div onClick={() => window.open(`https://wa.me/?text=Check this! ${window.location.origin}/watch/${activeVid.id}`)} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+                 <div onClick={() => window.open(`https://wa.me/?text=Check this sync! ${window.location.origin}/watch/${activeVid.id}`)} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
                     <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center text-white shadow-xl"><Send className="w-5 h-5 fill-white"/></div>
-                    <span className="text-[10px] font-black uppercase text-zinc-500">WA</span>
-                 </div>
-                 <div onClick={() => triggerToast("Starting Native Share...", "info")} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
-                    <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xl"><MoreHorizontal/></div>
-                    <span className="text-[10px] font-black uppercase text-zinc-500">More</span>
+                    <span className="text-[10px] font-black uppercase text-zinc-500">WhatsApp</span>
                  </div>
               </div>
 
-              {/* Row 3: Action Grid */}
+              {/* Action Grid */}
               <div className="p-4 grid grid-cols-3 gap-4">
                  <div onClick={() => setShowSpeed(!showSpeed)} className="flex flex-col items-center gap-2 cursor-pointer transition">
                     <div className={`w-14 h-14 ${showSpeed ? 'bg-red-600' : 'bg-zinc-800'} rounded-2xl flex items-center justify-center text-zinc-400 shadow-lg`}><Zap className="w-6 h-6"/></div>
                     <span className="text-[10px] font-black text-zinc-500 uppercase">Speed</span>
                  </div>
-                 <div onClick={handleDownload} className="flex flex-col items-center gap-2 cursor-pointer">
+                 <div onClick={() => triggerToast("Starting Save...", "info")} className="flex flex-col items-center gap-2 cursor-pointer">
                     <div className="w-14 h-14 bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 shadow-lg"><Download className="w-6 h-6 text-green-500"/></div>
                     <span className="text-[10px] font-black text-zinc-500 uppercase">Save</span>
                  </div>
@@ -268,9 +251,9 @@ export default function Feed() {
               </div>
 
               {showSpeed && (
-                <div className="p-4 flex gap-3 justify-center animate-in fade-in duration-300">
+                <div className="p-4 flex gap-3 justify-center animate-in fade-in duration-300 bg-black rounded-3xl mt-2 border border-white/5">
                   {[0.5, 1.0, 1.5, 2.0].map(s => (
-                    <button key={s} onClick={() => { setPlaybackRate(s); triggerToast(`Speed set to ${s}x`, "info"); setShowSpeed(false); }} className={`px-5 py-2 rounded-full text-xs font-black transition ${playbackRate === s ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>{s}x</button>
+                    <button key={s} onClick={() => { setPlaybackRate(s); triggerToast(`Sync set to ${s}x`, "info"); setShowSpeed(false); }} className={`px-5 py-2 rounded-full text-xs font-black transition ${playbackRate === s ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500'}`}>{s}x</button>
                   ))}
                 </div>
               )}
@@ -283,10 +266,10 @@ export default function Feed() {
         <div className="fixed inset-0 z-[700]">
            <div className="drawer-mask" onClick={() => setShowReport(false)} />
            <div className="drawer-content p-8 animate-in slide-in-from-bottom duration-300">
-              <h3 className="text-red-500 font-black uppercase text-sm mb-6 tracking-widest italic">Report Sync</h3>
+              <h3 className="text-red-500 font-black uppercase text-sm mb-6 tracking-widest italic">Report this Sync</h3>
               <div className="space-y-3">
                  {["Inappropriate", "Copyright", "Spam", "Other"].map(r => (
-                   <button key={r} onClick={() => { triggerToast("Content Reported. We will review.", "success"); setShowReport(false); }} className="w-full p-5 bg-zinc-900 rounded-2xl text-left text-sm font-black italic border border-white/5 active:border-red-600 transition text-white">{r}</button>
+                   <button key={r} onClick={() => { triggerToast("Report received. We will review.", "success"); setShowReport(false); }} className="w-full p-5 bg-zinc-900 rounded-2xl text-left text-sm font-black italic border border-white/5 active:border-red-600 transition text-white">{r}</button>
                  ))}
               </div>
            </div>
@@ -329,9 +312,8 @@ export default function Feed() {
   );
 }
 
-// --- VIDEO SLIDE COMPONENT ---
-
-function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, playbackRate }: VideoSlideProps) {
+// --- VIDEO PLAYER COMPONENT ---
+function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, playbackRate }: any) {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [commentCount, setCommentCount] = useState(0);
@@ -394,7 +376,6 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
     <section className="feed-item" onClick={handleInteraction}>
       <video ref={videoRef} src={video.url} loop muted={muted} playsInline className="h-full w-full object-cover md:object-contain md:max-w-[480px]" />
       
-      {/* ⏸ PLAY ICON (Visible on Pause) */}
       {isPaused && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none animate-in fade-in zoom-in duration-200">
            <div className="w-20 h-20 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
@@ -403,12 +384,11 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
         </div>
       )}
 
-      {/* Sidebar */}
       <div className="absolute right-4 bottom-32 flex flex-col gap-6 items-center z-40 pointer-events-auto" onClick={e => e.stopPropagation()}>
         <div className="relative mb-2">
           <Link href={`/user/${video.userId}`}><img src={video.creator?.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${video.userId}`} className="w-12 h-12 rounded-full border-2 border-white object-cover" alt="a"/></Link>
           {!isFollowing && user?.uid !== video.userId && (
-             <button onClick={followUser} className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black active:scale-125 transition"><Plus className="w-3 h-3 text-white" /></button>
+             <button onClick={followUser} className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black active:scale-125 transition shadow-lg"><Plus className="w-3 h-3 text-white" /></button>
           )}
         </div>
         <button onClick={handleLike} className="flex flex-col items-center gap-1"><Heart className={`w-8 h-8 ${liked ? 'fill-red-600 text-red-600 scale-125' : 'text-white'} transition-all`} /><span className="text-[10px] font-black text-white text-shadow uppercase">{likesCount}</span></button>
@@ -417,11 +397,11 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
       </div>
 
       <div className="absolute bottom-0 left-0 w-full p-6 pb-28 bg-gradient-to-t from-black/90 via-black/20 to-transparent z-30 pointer-events-none">
-        <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }} className="pointer-events-auto mb-4 bg-black/40 p-3 rounded-full border border-white/10 backdrop-blur-md active:scale-90 transition">
+        <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }} className="pointer-events-auto mb-4 bg-black/40 p-3 rounded-full border border-white/10 backdrop-blur-md active:scale-90 transition shadow-lg">
           {muted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
         </button>
         <div className="flex items-center gap-1 mb-1 pointer-events-auto">
-          <Link href={`/user/${video.userId}`} className="font-black text-lg text-white text-shadow block">@{video.creator?.username || video.username}</Link>
+          <Link href={`/user/${video.userId}`} className="font-black text-lg text-white text-shadow block tracking-tight">@{video.creator?.username || video.username}</Link>
           {video.creator?.isPremium && <VerifiedBadge className="w-4 h-4" />}
         </div>
         <p className="text-sm text-zinc-100 text-shadow font-semibold line-clamp-2 max-w-[80%]">{video.title}</p>
@@ -430,11 +410,10 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
   );
 }
 
-// --- Recursive Comments ---
+// --- RECURSIVE COMMENTS ---
 function CommentItem({ comment, vidId, onReply }: { comment: CommentData, vidId: string, onReply: (id: string, user: string) => void }) {
   const [replies, setReplies] = useState<CommentData[]>([]);
   const [showReplies, setShowReplies] = useState(false);
-
   useEffect(() => {
     if (!showReplies) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${vidId}/comments/${comment.id}/replies`), orderBy("createdAt", "asc")), (snap) => {
@@ -445,15 +424,15 @@ function CommentItem({ comment, vidId, onReply }: { comment: CommentData, vidId:
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-3 px-2">
-        <img src={comment.userPhoto || `https://api.dicebear.com/7.x/adventurer/svg?seed=${comment.userId}`} className="w-9 h-9 rounded-full object-cover border border-white/10" alt="u" />
+      <div className="flex gap-3 px-2 animate-in fade-in duration-300">
+        <img src={comment.userPhoto || `https://api.dicebear.com/7.x/adventurer/svg?seed=${comment.userId}`} className="w-9 h-9 rounded-full object-cover border border-white/10 shadow-lg" alt="u" />
         <div className="flex-1">
-          <p className="text-[11px] font-black text-zinc-400 mb-0.5">@{comment.username}</p>
+          <p className="text-[11px] font-black text-zinc-400 mb-0.5 uppercase tracking-tighter">@{comment.username}</p>
           <p className="text-sm text-white leading-relaxed">{comment.text}</p>
           <div className="flex gap-4 mt-2">
-             <button onClick={() => onReply(comment.id, comment.username)} className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter">Reply</button>
+             <button onClick={() => onReply(comment.id, comment.username)} className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter active:text-red-500 transition">Reply</button>
              {(replies.length > 0) && (
-                <button onClick={() => setShowReplies(!showReplies)} className="text-[10px] font-black text-red-500 uppercase tracking-tighter flex items-center gap-1">
+                <button onClick={() => setShowReplies(!showReplies)} className="text-[10px] font-black text-red-500 uppercase tracking-tighter flex items-center gap-1 active:scale-95 transition">
                   {showReplies ? "Hide" : `View ${replies.length} replies`}
                 </button>
              )}
