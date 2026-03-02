@@ -9,7 +9,7 @@ import {
 import { 
   Heart, MessageCircle, Share2, Volume2, VolumeX, 
   Plus, X, Send, Link as LinkIcon, MoreHorizontal,
-  Download, Flag, Zap, AlertCircle, CheckCircle2, Search, ArrowRight, Play, CornerDownRight, ChevronRight
+  Download, Flag, Zap, AlertCircle, CheckCircle2, Search, ArrowRight, Play, CornerDownRight
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import Navbar from "@/components/Navbar";
@@ -26,6 +26,14 @@ interface CommentData {
   userPhoto?: string;
   createdAt: any;
   parentId?: string | null;
+}
+
+interface VideoSlideProps {
+  video: Wallpaper & { creator?: UserData };
+  muted: boolean;
+  setMuted: (val: boolean) => void;
+  onShare: () => void;
+  onComment: () => void;
 }
 
 export default function Feed() {
@@ -48,7 +56,7 @@ export default function Feed() {
   const [searchResults, setSearchResults] = useState<{ users: UserData[], videos: Wallpaper[] }>({ users: [], videos: [] });
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- COMMENT STATES ---
+  // --- COMMENTS STATES ---
   const [comments, setComments] = useState<CommentData[]>([]);
   const [commentInput, setCommentInput] = useState("");
   const [replyTo, setReplyTo] = useState<{ id: string; username: string; path: string } | null>(null);
@@ -58,7 +66,6 @@ export default function Feed() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 1. Fetch Feed & Shuffle
   useEffect(() => {
     const fetchFeed = async () => {
       try {
@@ -76,7 +83,6 @@ export default function Feed() {
     fetchFeed();
   }, []);
 
-  // 2. Search Engine Logic
   useEffect(() => {
     if (searchQuery.length < 2) { setSuggestions([]); return; }
     const delay = setTimeout(async () => {
@@ -100,7 +106,6 @@ export default function Feed() {
     setIsSearching(false);
   };
 
-  // 3. Comments Logic
   useEffect(() => {
     if (!activeVid || !showComments) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${activeVid.id}/comments`), orderBy("createdAt", "asc")), (snap) => {
@@ -124,7 +129,6 @@ export default function Feed() {
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden">
       
-      {/* 🍞 TOAST */}
       {toast && (
         <div className={`fixed top-24 right-0 z-[600] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 transform transition-all animate-in slide-in-from-right duration-300 ${
           toast.type === 'error' ? 'bg-zinc-900 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-red-600 text-white'
@@ -134,7 +138,6 @@ export default function Feed() {
         </div>
       )}
 
-      {/* HEADER */}
       <header className="absolute top-0 left-0 right-0 p-6 z-50 flex justify-between items-center pt-safe pointer-events-none">
         <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto">
           <span className="text-red-600">OTAKU</span>WALL
@@ -142,7 +145,6 @@ export default function Feed() {
         <button onClick={() => setShowSearch(true)} className="p-3 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full text-white pointer-events-auto active:scale-90 transition"><Search/></button>
       </header>
 
-      {/* MAIN FEED */}
       <main className="feed-container no-scrollbar">
         {loading ? (
           <div className="h-full w-full flex items-center justify-center bg-black"><div className="otaku-spinner"></div></div>
@@ -157,45 +159,53 @@ export default function Feed() {
         )}
       </main>
 
-      {/* 🔍 SEARCH MODAL */}
-      <div className={`fixed inset-0 z-[500] transition-transform duration-500 bg-black ${showSearch ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`fixed inset-0 z-[500] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-black ${showSearch ? 'translate-x-0' : 'translate-x-full'}`}>
         <header className="p-6 pt-safe border-b border-white/5 flex items-center gap-4 bg-zinc-950">
-           <button onClick={() => {setShowSearch(false); setSearchResults({users:[], videos:[]});}} className="p-2 bg-zinc-900 rounded-full"><X/></button>
+           <button onClick={() => {setShowSearch(false); setSearchResults({users:[], videos:[]}); setSearchQuery("");}} className="p-2 bg-zinc-900 rounded-full"><X/></button>
            <form onSubmit={(e) => { e.preventDefault(); executeSearch(searchQuery); }} className="flex-1 relative">
               <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search otakus or syncs..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all" />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
            </form>
         </header>
         <div className="flex-1 overflow-y-auto p-6 no-scrollbar pb-32">
-            {suggestions.map((s, i) => (
-              <button key={i} onClick={() => executeSearch(s)} className="w-full flex items-center justify-between p-4 bg-zinc-900/50 rounded-2xl mb-2 border border-white/5 font-bold uppercase tracking-tighter">@{s}<ArrowRight className="text-red-600 w-4 h-4"/></button>
-            ))}
-            <div className="grid grid-cols-2 gap-3 mt-6">
-               {searchResults.videos.map(v => (
-                 <Link key={v.id} href={`/watch/${v.id}`} className="aspect-[9/16] rounded-2xl bg-zinc-900 overflow-hidden relative border border-white/5 shadow-2xl">
-                    <video src={`${v.url}#t=0.1`} className="w-full h-full object-cover opacity-60" muted playsInline />
-                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black to-transparent">
-                        <p className="text-[10px] font-black text-white uppercase truncate">{v.title}</p>
-                    </div>
-                 </Link>
-               ))}
+          {isSearching ? <div className="flex justify-center py-20"><div className="otaku-spinner"/></div> : (
+            <div className="space-y-10">
+               {searchResults.users.length > 0 && (
+                 <div>
+                   <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-4">Otakus Found</p>
+                   <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+                     {searchResults.users.map(u => (
+                       <Link key={u.uid} href={`/user/${u.uid}`} className="flex flex-col items-center min-w-[90px] gap-2">
+                          <img src={u.photoURL} className="w-16 h-16 rounded-full object-cover border-2 border-red-600/20" />
+                          <span className="text-[10px] font-black truncate w-20 text-center">@{u.username}</span>
+                       </Link>
+                     ))}
+                   </div>
+                 </div>
+               )}
+               {searchResults.videos.length > 0 && (
+                 <div className="grid grid-cols-2 gap-3">
+                   {searchResults.videos.map(v => (
+                     <Link key={v.id} href={`/watch/${v.id}`} className="aspect-[9/16] rounded-2xl bg-zinc-900 overflow-hidden relative border border-white/5 shadow-2xl">
+                        <video src={`${v.url}#t=0.1`} className="w-full h-full object-cover opacity-60" muted playsInline />
+                        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black to-transparent">
+                           <p className="text-[10px] font-black text-white uppercase truncate">{v.title}</p>
+                        </div>
+                     </Link>
+                   ))}
+                 </div>
+               )}
+               {searchQuery.length > 2 && searchResults.users.length === 0 && searchResults.videos.length === 0 && (
+                 <div className="text-center py-20 opacity-30">
+                   <Search className="w-12 h-12 mx-auto mb-4" />
+                   <p className="text-xs font-black uppercase tracking-widest">No correlates found for "{searchQuery}"</p>
+                 </div>
+               )}
             </div>
-            {searchResults.users.length > 0 && (
-              <div className="mt-8">
-                <p className="text-[10px] font-black uppercase text-zinc-600 mb-4 px-2 tracking-[2px]">Otaku Matches</p>
-                {searchResults.users.map(u => (
-                  <Link key={u.uid} href={`/user/${u.uid}`} className="flex items-center gap-4 p-4 bg-zinc-900/50 rounded-3xl border border-white/5 mb-3 active:scale-95 transition">
-                    <img src={u.photoURL} className="w-12 h-12 rounded-full object-cover border border-white/10" alt="u" />
-                    <span className="font-black text-sm uppercase italic">@{u.username}</span>
-                    <ChevronRight className="ml-auto w-5 h-5 text-zinc-700" />
-                  </Link>
-                ))}
-              </div>
-            )}
+          )}
         </div>
       </div>
 
-      {/* 💬 COMMENTS DRAWER */}
       {showComments && (
         <div className="fixed inset-0 z-[500]">
           <div className="drawer-mask" onClick={() => { setShowComments(false); setReplyTo(null); }} />
@@ -225,7 +235,6 @@ export default function Feed() {
         </div>
       )}
 
-      {/* 🚀 SHARE DRAWER */}
       {showShare && activeVid && (
         <div className="fixed inset-0 z-[500]">
            <div className="drawer-mask" onClick={() => setShowShare(false)} />
@@ -247,14 +256,13 @@ export default function Feed() {
                     <span className="text-[10px] font-black uppercase text-zinc-500">Save</span>
                  </div>
               </div>
-              <button onClick={() => { setShowShare(false); setShowReport(true); }} className="w-full py-5 flex items-center justify-center gap-3 text-red-500 font-black text-[10px] uppercase tracking-widest bg-white/5 rounded-2xl mt-6">
+              <button onClick={() => { setShowShare(false); setShowReport(true); }} className="w-full py-5 flex items-center justify-center gap-3 text-red-500 font-black text-[10px] uppercase tracking-widest bg-white/5 rounded-2xl mt-4">
                 <Flag className="w-4 h-4" /> Report content
               </button>
            </div>
         </div>
       )}
 
-      {/* 🚩 REPORT DRAWER */}
       {showReport && (
         <div className="fixed inset-0 z-[700]">
            <div className="drawer-mask" onClick={() => setShowReport(false)} />
@@ -274,17 +282,17 @@ export default function Feed() {
   );
 }
 
-// --- Video Slide Component ---
-
+// --- VIDEO SLIDE COMPONENT ---
 function VideoSlide({ video, muted, setMuted, onShare, onComment }: any) {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [commentCount, setCommentCount] = useState(0);
   const [liked, setLiked] = useState(video.likes?.includes(user?.uid));
-  const [likesCount, setLikesCount] = useState(video.likes?.length || 0);
+  const [likesCount, setLikesCount] = useState<number>(video.likes?.length || 0);
   const [isPaused, setIsPaused] = useState(false);
   const lastClickTime = useRef(0);
 
+  // Live Comment Count Listener
   useEffect(() => {
     const unsub = onSnapshot(collection(db, `wallpapers/${video.id}/comments`), (snap) => setCommentCount(snap.size));
     return () => unsub();
@@ -299,12 +307,12 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment }: any) {
     return () => obs.disconnect();
   }, []);
 
-  const handleInteraction = () => {
+  const handleInteraction = (e: React.MouseEvent) => {
     const now = Date.now();
     if (now - lastClickTime.current < 300) {
       // Double tap -> Like logic
       if (!liked) {
-          setLiked(true); setLikesCount(c => c + 1);
+          setLiked(true); setLikesCount((c: number) => c + 1); // Explicitly cast 'c' to number
           updateDoc(doc(db, "wallpapers", video.id), { likes: arrayUnion(user?.uid) });
       }
     } else {
@@ -339,14 +347,13 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment }: any) {
       <div className="absolute right-4 bottom-32 flex flex-col gap-6 items-center z-40 pointer-events-auto" onClick={e => e.stopPropagation()}>
         <div className="relative mb-2">
           <Link href={`/user/${video.userId}`}><img src={video.creator?.photoURL} className="w-12 h-12 rounded-full border-2 border-white object-cover" /></Link>
-          {!video.isLive && user?.uid !== video.userId && <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black"><Plus className="w-3 h-3 text-white" /></div>}
+          {user?.uid !== video.userId && <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-600 rounded-full p-1 border-2 border-black"><Plus className="w-3 h-3 text-white" /></div>}
         </div>
         <button className="flex flex-col items-center"><Heart className={`w-8 h-8 ${liked ? 'fill-red-600 text-red-600 scale-125' : 'text-white'} transition-all`} /><span className="text-[10px] font-black text-shadow">{likesCount}</span></button>
         <button onClick={onComment} className="flex flex-col items-center"><MessageCircle className="w-8 h-8 text-white" /><span className="text-[10px] font-black text-shadow">{commentCount}</span></button>
         <button onClick={onShare} className="flex flex-col items-center"><Share2 className="w-8 h-8 text-white" /><span className="text-[10px] font-black text-shadow uppercase">Share</span></button>
       </div>
 
-      {/* Bottom Info */}
       <div className="absolute bottom-0 left-0 w-full p-6 pb-28 bg-gradient-to-t from-black/90 via-black/20 to-transparent z-30 pointer-events-none">
         <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }} className="pointer-events-auto mb-4 bg-black/40 p-3 rounded-full border border-white/10 backdrop-blur-md">{muted ? <VolumeX className="w-4 h-4"/> : <Volume2 className="w-4 h-4"/>}</button>
         <Link href={`/user/${video.userId}`} className="font-black text-lg text-white text-shadow block pointer-events-auto flex items-center gap-1">
@@ -361,7 +368,7 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment }: any) {
 
 // --- Recursive Comment Item ---
 
-function CommentItem({ comment, vidId, onReply }: any) {
+function CommentItem({ comment, vidId, onReply }: { comment: CommentData, vidId: string, onReply: (id: string, username: string) => void }) {
   const [replies, setReplies] = useState<CommentData[]>([]);
   const [showReplies, setShowReplies] = useState(false);
   useEffect(() => {
@@ -371,6 +378,7 @@ function CommentItem({ comment, vidId, onReply }: any) {
     });
     return () => unsub();
   }, [showReplies, vidId, comment.id]);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-3">
@@ -389,6 +397,16 @@ function CommentItem({ comment, vidId, onReply }: any) {
       {showReplies && <div className="ml-10 border-l border-zinc-900 pl-4 space-y-6 mt-2 animate-in slide-in-from-left-2 duration-300">
         {replies.map(r => <CommentItem key={r.id} comment={r} vidId={vidId} onReply={onReply} />)}
       </div>}
+    </div>
+  );
+}
+
+// --- Share Icons for Drawer ---
+function ShareBtn({ icon, label, color, onClick }: any) {
+  return (
+    <div onClick={onClick} className="flex flex-col items-center gap-2 min-w-[70px] cursor-pointer active:scale-90 transition">
+      <div className={`w-14 h-14 ${color} rounded-full flex items-center justify-center text-white shadow-xl`}>{icon}</div>
+      <span className="text-[10px] font-black text-zinc-500 uppercase">{label}</span>
     </div>
   );
 }
