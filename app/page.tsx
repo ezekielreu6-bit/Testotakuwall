@@ -17,7 +17,7 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import Link from "next/link";
 import { Wallpaper, UserData } from "@/types";
 
-// --- Types ---
+// --- Strict Types for Vercel Build ---
 interface CommentData {
   id: string;
   text: string;
@@ -46,7 +46,7 @@ export default function Feed() {
   const [followingList, setFollowingList] = useState<string[]>([]);
   const [friends, setFriends] = useState<UserData[]>([]);
 
-  // --- UI STATES ---
+  // --- UI STATE ---
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -54,26 +54,23 @@ export default function Feed() {
   const [showReport, setShowReport] = useState(false);
   const [activeVid, setActiveVid] = useState<any>(null);
 
-  // --- SEARCH STATES ---
+  // --- SEARCH STATE ---
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ users: UserData[], videos: Wallpaper[] }>({ users: [], videos: [] });
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- COMMENT STATES ---
+  // --- COMMENT STATE ---
   const [comments, setComments] = useState<CommentData[]>([]);
   const [commentInput, setCommentInput] = useState("");
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
-
-  // --- DRAWER SUB-STATES ---
-  const [showSpeed, setShowSpeed] = useState(false); // FIXED: Added this state
-  const [reportReason, setReportReason] = useState("");
+  const [showSpeed, setShowSpeed] = useState(false);
 
   const triggerToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 1. Core Data Loaders
+  // 1. Core Data Listeners
   useEffect(() => {
     const fetchFeed = async () => {
       try {
@@ -84,22 +81,21 @@ export default function Feed() {
           const userSnap = await getDoc(doc(db, "users", item.userId));
           return { ...item, id: d.id, creator: userSnap.exists() ? userSnap.data() as UserData : undefined };
         }));
-        setVideos(videoData.sort(() => Math.random() - 0.5)); // Shuffle
+        setVideos(videoData.sort(() => Math.random() - 0.5));
       } catch (e) { console.error(e); }
       setLoading(false);
     };
 
     if (user) {
       onSnapshot(collection(db, `users/${user.uid}/following`), (snap) => setFollowingList(snap.docs.map(d => d.id)));
-      getDocs(query(collection(db, `users/${user.uid}/following`), limit(8))).then(async (snap) => {
-         const fData = await Promise.all(snap.docs.map(f => getDoc(doc(db, "users", f.id))));
-         setFriends(fData.map(d => d.data() as UserData));
+      getDocs(query(collection(db, "users"), limit(8))).then(snap => {
+         setFriends(snap.docs.map(d => ({ ...d.data(), uid: d.id } as UserData)).filter(u => u.uid !== user.uid));
       });
     }
     fetchFeed();
   }, [user]);
 
-  // 2. Search Logic (Prefix matching)
+  // 2. Search Logic (Prefix Matching)
   useEffect(() => {
     if (searchQuery.length < 1) { setSearchResults({ users: [], videos: [] }); return; }
     const delay = setTimeout(async () => {
@@ -124,7 +120,7 @@ export default function Feed() {
     return () => unsub();
   }, [activeVid, showComments]);
 
-  const submitComment = async () => {
+  const postComment = async () => {
     if (!user || !commentInput.trim() || !activeVid) return;
     const text = commentInput; setCommentInput("");
     const path = replyTo ? `wallpapers/${activeVid.id}/comments/${replyTo.id}/replies` : `wallpapers/${activeVid.id}/comments`;
@@ -135,22 +131,38 @@ export default function Feed() {
     setReplyTo(null);
   };
 
+  // 4. Drawer Handlers
+  const handleDownload = async () => {
+    if (!activeVid) return;
+    triggerToast("Starting Download...", "info");
+    try {
+      const res = await fetch(activeVid.url);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `OtakuWall_${activeVid.id}.mp4`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      triggerToast("Saved to Device! 🔥");
+    } catch (e) { triggerToast("Download Error", "error"); }
+    setShowShare(false);
+  };
+
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden">
       
-      {/* 🍞 TOAST */}
+      {/* 🍞 TOAST SYSTEM */}
       {toast && (
         <div className={`fixed top-24 right-0 z-[1000] px-6 py-4 rounded-l-2xl shadow-2xl flex items-center gap-3 border-l-4 bg-zinc-900 animate-in slide-in-from-right duration-300 ${
           toast.type === 'error' ? 'border-yellow-500 text-yellow-500' : toast.type === 'info' ? 'border-blue-500 text-blue-500' : 'border-red-600 text-white'
         }`}>
-          <AlertCircle className="w-5 h-5"/>
+          {toast.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
           <span className="font-bold text-[11px] uppercase tracking-widest">{toast.msg}</span>
         </div>
       )}
 
       {/* HEADER */}
       <header className="absolute top-0 left-0 right-0 p-6 z-50 flex justify-between items-center pt-safe pointer-events-none">
-        <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto italic uppercase tracking-tighter">
+        <h1 className="text-2xl font-black italic text-white text-shadow pointer-events-auto uppercase tracking-tighter">
           <span className="text-red-600">OTAKU</span>WALL
         </h1>
         <button onClick={() => setShowSearch(true)} className="p-3 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full text-white pointer-events-auto active:scale-90 transition"><Search/></button>
@@ -174,7 +186,7 @@ export default function Feed() {
       {/* 🔍 SEARCH MODAL */}
       <div className={`fixed inset-0 z-[500] transition-transform duration-300 ease-out bg-black ${showSearch ? 'translate-x-0' : 'translate-x-full'}`}>
         <header className="p-6 pt-safe border-b border-white/5 flex items-center gap-4 bg-zinc-950">
-           <button onClick={() => setShowSearch(false)} className="p-2 bg-zinc-900 rounded-full"><X/></button>
+           <button onClick={() => {setShowSearch(false); setSearchResults({users:[], videos:[]});}} className="p-2 bg-zinc-900 rounded-full active:scale-90 transition"><X/></button>
            <div className="flex-1 relative">
               <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search otakus..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-red-600 transition-all text-white" />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
@@ -203,7 +215,7 @@ export default function Feed() {
         </div>
       </div>
 
-      {/* 🚀 SHARE DRAWER (HTML REPLICA) */}
+      {/* 🚀 SHARE DRAWER (Full Original Layout) */}
       {showShare && activeVid && (
         <div className="fixed inset-0 z-[600]">
            <div className="drawer-mask" onClick={() => { setShowShare(false); setShowSpeed(false); }} />
@@ -213,40 +225,44 @@ export default function Feed() {
                  <button onClick={() => setShowShare(false)} className="absolute right-0 top-3 text-zinc-600"><X className="w-5 h-5"/></button>
               </div>
 
-              {/* Row 1: Friends Scroll */}
+              {/* Row 1: Friends */}
               <div className="flex gap-4 overflow-x-auto p-4 border-b border-white/5 no-scrollbar mb-4">
                 {friends.map((f, i) => (
-                    <div key={i} className="flex flex-col items-center min-w-[65px] gap-1 cursor-pointer active:scale-90 transition">
+                    <div key={i} className="flex flex-col items-center min-w-[65px] gap-1 cursor-pointer active:scale-90 transition" onClick={() => triggerToast(`Sent to @${f.username}`)}>
                       <img src={f.photoURL} className="w-12 h-12 rounded-full object-cover border border-white/10" alt="f"/>
                       <span className="text-[9px] font-bold text-zinc-500 truncate w-14 text-center">@{f.username}</span>
                     </div>
                 ))}
               </div>
 
-              {/* Row 2: App Circles */}
+              {/* Row 2: Apps */}
               <div className="flex gap-6 justify-center pb-8 border-b border-white/5">
-                 <div onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid.id}`); triggerToast("Copied!"); setShowShare(false); }} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+                 <div onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${activeVid.id}`); triggerToast("Link Copied!"); setShowShare(false); }} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
                     <div className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-white shadow-xl border border-white/5"><LinkIcon/></div>
                     <span className="text-[10px] font-black uppercase text-zinc-500">Link</span>
                  </div>
-                 <div onClick={() => window.open(`https://wa.me/?text=Check this sync! ${window.location.origin}/watch/${activeVid.id}`)} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+                 <div onClick={() => window.open(`https://wa.me/?text=Check this! ${window.location.origin}/watch/${activeVid.id}`)} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
                     <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center text-white shadow-xl"><Send className="w-5 h-5 fill-white"/></div>
-                    <span className="text-[10px] font-black uppercase text-zinc-500">WhatsApp</span>
+                    <span className="text-[10px] font-black uppercase text-zinc-500">WA</span>
+                 </div>
+                 <div onClick={() => triggerToast("Starting Native Share...", "info")} className="flex flex-col items-center gap-2 cursor-pointer active:scale-90 transition">
+                    <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xl"><MoreHorizontal/></div>
+                    <span className="text-[10px] font-black uppercase text-zinc-500">More</span>
                  </div>
               </div>
 
               {/* Row 3: Action Grid */}
               <div className="p-4 grid grid-cols-3 gap-4">
-                 <div onClick={() => setShowSpeed(!showSpeed)} className="flex flex-col items-center gap-2 cursor-pointer">
+                 <div onClick={() => setShowSpeed(!showSpeed)} className="flex flex-col items-center gap-2 cursor-pointer transition">
                     <div className={`w-14 h-14 ${showSpeed ? 'bg-red-600' : 'bg-zinc-800'} rounded-2xl flex items-center justify-center text-zinc-400 shadow-lg`}><Zap className="w-6 h-6"/></div>
                     <span className="text-[10px] font-black text-zinc-500 uppercase">Speed</span>
                  </div>
-                 <div onClick={() => triggerToast("Download Started", "info")} className="flex flex-col items-center gap-2 cursor-pointer">
-                    <div className="w-14 h-14 bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 shadow-lg"><Download className="w-6 h-6"/></div>
+                 <div onClick={handleDownload} className="flex flex-col items-center gap-2 cursor-pointer">
+                    <div className="w-14 h-14 bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 shadow-lg"><Download className="w-6 h-6 text-green-500"/></div>
                     <span className="text-[10px] font-black text-zinc-500 uppercase">Save</span>
                  </div>
                  <div onClick={() => { setShowShare(false); setShowReport(true); }} className="flex flex-col items-center gap-2 cursor-pointer">
-                    <div className="w-14 h-14 bg-red-900/20 rounded-2xl flex items-center justify-center text-red-500 shadow-lg"><Flag className="w-6 h-6"/></div>
+                    <div className="w-14 h-14 bg-red-900/20 rounded-2xl flex items-center justify-center text-red-500 shadow-lg"><Flag className="w-6 h-6 text-red-500"/></div>
                     <span className="text-[10px] font-black text-zinc-500 uppercase">Report</span>
                  </div>
               </div>
@@ -254,10 +270,25 @@ export default function Feed() {
               {showSpeed && (
                 <div className="p-4 flex gap-3 justify-center animate-in fade-in duration-300">
                   {[0.5, 1.0, 1.5, 2.0].map(s => (
-                    <button key={s} onClick={() => { setPlaybackRate(s); triggerToast(`Playback: ${s}x`, "info"); setShowSpeed(false); }} className={`px-5 py-2 rounded-full text-xs font-black transition ${playbackRate === s ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>{s}x</button>
+                    <button key={s} onClick={() => { setPlaybackRate(s); triggerToast(`Speed set to ${s}x`, "info"); setShowSpeed(false); }} className={`px-5 py-2 rounded-full text-xs font-black transition ${playbackRate === s ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>{s}x</button>
                   ))}
                 </div>
               )}
+           </div>
+        </div>
+      )}
+
+      {/* 🚩 REPORT DRAWER */}
+      {showReport && (
+        <div className="fixed inset-0 z-[700]">
+           <div className="drawer-mask" onClick={() => setShowReport(false)} />
+           <div className="drawer-content p-8 animate-in slide-in-from-bottom duration-300">
+              <h3 className="text-red-500 font-black uppercase text-sm mb-6 tracking-widest italic">Report Sync</h3>
+              <div className="space-y-3">
+                 {["Inappropriate", "Copyright", "Spam", "Other"].map(r => (
+                   <button key={r} onClick={() => { triggerToast("Content Reported. We will review.", "success"); setShowReport(false); }} className="w-full p-5 bg-zinc-900 rounded-2xl text-left text-sm font-black italic border border-white/5 active:border-red-600 transition text-white">{r}</button>
+                 ))}
+              </div>
            </div>
         </div>
       )}
@@ -268,42 +299,28 @@ export default function Feed() {
           <div className="drawer-mask" onClick={() => { setShowComments(false); setReplyTo(null); }} />
           <div className="drawer-content flex flex-col h-[75vh] animate-in slide-in-from-bottom duration-300">
             <header className="p-4 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
-              <span className="text-xs font-black uppercase text-zinc-500 tracking-widest px-2">Discussion Hub</span>
-              <button onClick={() => setShowComments(false)} className="p-2 bg-white/5 rounded-full"><X className="w-4 h-4"/></button>
+              <span className="text-xs font-black uppercase text-zinc-500 px-2 tracking-widest">Discussion Hub</span>
+              <button onClick={() => setShowComments(false)} className="p-2 bg-white/5 rounded-full active:scale-90 transition"><X className="w-4 h-4"/></button>
             </header>
             <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-10">
               {comments.map((c) => (
                 <CommentItem 
-                   key={c.id} 
-                   comment={c} 
-                   vidId={activeVid.id} 
-                   onReply={(id: string, username: string) => setReplyTo({id, username})} 
+                  key={c.id} 
+                  comment={c} 
+                  vidId={activeVid.id} 
+                  onReply={(id: string, username: string) => setReplyTo({id, username})} 
                 />
               ))}
+              {comments.length === 0 && <div className="text-center py-20 opacity-20"><MessageCircle className="mx-auto w-12 h-12 mb-2"/><p className="text-xs font-black uppercase tracking-widest">No syncs yet</p></div>}
             </div>
             <div className="p-4 bg-black border-t border-white/5 pb-safe">
               {replyTo && <div className="flex items-center justify-between bg-zinc-900 px-4 py-2 rounded-t-xl text-[10px] font-bold border border-white/5"><span>Replying to <span className="text-red-500">@{replyTo.username}</span></span><button onClick={() => setReplyTo(null)}><X className="w-3 h-3"/></button></div>}
               <div className="flex gap-2 items-center">
                 <input type="text" value={commentInput} onChange={(e) => setCommentInput(e.target.value)} placeholder="Add a comment..." className={`flex-1 bg-zinc-900 border border-white/5 outline-none px-5 py-3 text-sm text-white ${replyTo ? 'rounded-b-2xl' : 'rounded-full'}`} />
-                <button onClick={submitComment} className="bg-red-600 p-3 rounded-full shadow-lg active:scale-90 transition"><Send className="w-4 h-4"/></button>
+                <button onClick={submitComment} className="bg-red-600 p-3 rounded-full active:scale-90 transition shadow-lg"><Send className="w-4 h-4"/></button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* 🚩 REPORT DRAWER */}
-      {showReport && (
-        <div className="fixed inset-0 z-[700]">
-           <div className="drawer-mask" onClick={() => setShowReport(false)} />
-           <div className="drawer-content p-8 animate-in slide-in-from-bottom duration-300">
-              <h3 className="text-red-500 font-black uppercase text-sm mb-6 tracking-widest italic">Report content</h3>
-              <div className="space-y-3">
-                 {["Inappropriate", "Copyright", "Spam", "Other"].map(r => (
-                   <button key={r} onClick={() => { triggerToast("Report received. ✅", "success"); setShowReport(false); }} className="w-full p-5 bg-zinc-900 rounded-2xl text-left text-sm font-black border border-white/5 active:border-red-600 transition text-white italic">{r}</button>
-                 ))}
-              </div>
-           </div>
         </div>
       )}
 
@@ -314,7 +331,7 @@ export default function Feed() {
 
 // --- VIDEO SLIDE COMPONENT ---
 
-function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, playbackRate }: any) {
+function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, playbackRate }: VideoSlideProps) {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [commentCount, setCommentCount] = useState(0);
@@ -324,7 +341,7 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
   const lastClickTime = useRef(0);
 
   useEffect(() => {
-    setLiked(video.likes?.includes(user?.uid));
+    setLiked(video.likes?.includes(user?.uid || ""));
     const unsub = onSnapshot(collection(db, `wallpapers/${video.id}/comments`), (snap) => setCommentCount(snap.size));
     return () => unsub();
   }, [video.id, user, video.likes]);
@@ -335,7 +352,7 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
 
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => { 
-        if (e.isIntersecting) { videoRef.current?.play(); setIsPaused(false); }
+        if (e.isIntersecting) { videoRef.current?.play().catch(() => {}); setIsPaused(false); }
         else { videoRef.current?.pause(); }
     }, { threshold: 0.7 });
     if (videoRef.current) obs.observe(videoRef.current);
@@ -377,6 +394,7 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
     <section className="feed-item" onClick={handleInteraction}>
       <video ref={videoRef} src={video.url} loop muted={muted} playsInline className="h-full w-full object-cover md:object-contain md:max-w-[480px]" />
       
+      {/* ⏸ PLAY ICON (Visible on Pause) */}
       {isPaused && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none animate-in fade-in zoom-in duration-200">
            <div className="w-20 h-20 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
@@ -385,6 +403,7 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
         </div>
       )}
 
+      {/* Sidebar */}
       <div className="absolute right-4 bottom-32 flex flex-col gap-6 items-center z-40 pointer-events-auto" onClick={e => e.stopPropagation()}>
         <div className="relative mb-2">
           <Link href={`/user/${video.userId}`}><img src={video.creator?.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${video.userId}`} className="w-12 h-12 rounded-full border-2 border-white object-cover" alt="a"/></Link>
@@ -415,6 +434,7 @@ function VideoSlide({ video, muted, setMuted, onShare, onComment, isFollowing, p
 function CommentItem({ comment, vidId, onReply }: { comment: CommentData, vidId: string, onReply: (id: string, user: string) => void }) {
   const [replies, setReplies] = useState<CommentData[]>([]);
   const [showReplies, setShowReplies] = useState(false);
+
   useEffect(() => {
     if (!showReplies) return;
     const unsub = onSnapshot(query(collection(db, `wallpapers/${vidId}/comments/${comment.id}/replies`), orderBy("createdAt", "asc")), (snap) => {
@@ -425,22 +445,22 @@ function CommentItem({ comment, vidId, onReply }: { comment: CommentData, vidId:
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-3">
+      <div className="flex gap-3 px-2">
         <img src={comment.userPhoto || `https://api.dicebear.com/7.x/adventurer/svg?seed=${comment.userId}`} className="w-9 h-9 rounded-full object-cover border border-white/10" alt="u" />
         <div className="flex-1">
-          <p className="text-xs font-black text-zinc-400 mb-0.5">@{comment.username}</p>
+          <p className="text-[11px] font-black text-zinc-400 mb-0.5">@{comment.username}</p>
           <p className="text-sm text-white leading-relaxed">{comment.text}</p>
           <div className="flex gap-4 mt-2">
-             <button onClick={() => onReply(comment.id, comment.username)} className="text-[10px] font-black text-zinc-500 uppercase">Reply</button>
-             {(!showReplies || replies.length > 0) && (
-                <button onClick={() => setShowReplies(!showReplies)} className="text-[10px] font-black text-red-500 uppercase">
-                  {showReplies ? "Hide" : replies.length > 0 ? `View ${replies.length} replies` : "Replies"}
+             <button onClick={() => onReply(comment.id, comment.username)} className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter">Reply</button>
+             {(replies.length > 0) && (
+                <button onClick={() => setShowReplies(!showReplies)} className="text-[10px] font-black text-red-500 uppercase tracking-tighter flex items-center gap-1">
+                  {showReplies ? "Hide" : `View ${replies.length} replies`}
                 </button>
              )}
           </div>
         </div>
       </div>
-      {showReplies && <div className="ml-10 border-l border-zinc-900 pl-4 space-y-6 mt-2 animate-in slide-in-from-left-2 duration-300">
+      {showReplies && <div className="ml-10 border-l border-white/5 pl-4 space-y-6 mt-2 animate-in slide-in-from-left-2 duration-300">
         {replies.map(r => <CommentItem key={r.id} comment={r} vidId={vidId} onReply={onReply} />)}
       </div>}
     </div>
