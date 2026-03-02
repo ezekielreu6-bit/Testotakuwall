@@ -9,7 +9,7 @@ import {
 import { 
   Heart, MessageCircle, Share2, Volume2, VolumeX, 
   Plus, X, Send, Link as LinkIcon, MoreHorizontal,
-  Download, Flag, Zap, AlertCircle, CheckCircle2, Search, ArrowRight, Play, CornerDownRight,ChevronRight
+  Download, Flag, Zap, AlertCircle, CheckCircle2, Search, ArrowRight, Play, CornerDownRight, ChevronRight
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import Navbar from "@/components/Navbar";
